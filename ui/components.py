@@ -39,7 +39,7 @@ def journey(view):
         <div><small>Сейчас</small><strong>{e(employee.get('grade'))}</strong></div>
         <div class="cq-bridge"><div class="cq-bridge-line">→</div>{e(gaps)} навыков до цели</div>
         <div><small>{target_label}</small><strong class="cq-target">{e(target)}</strong></div>
-        <div class="cq-progress"><strong>{progress:.0f}%</strong><small>требований по навыкам выполнено</small>
+        <div class="cq-progress"><strong>{number(progress)}%</strong><small>требований по навыкам выполнено</small>
         <div class="cq-progress-track"><i style="width:{progress}%"></i></div></div></div>''')
 
 

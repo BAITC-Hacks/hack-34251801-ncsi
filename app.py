@@ -51,7 +51,7 @@ def render_recommendation(adapter, view, rec, index):
     with st.container(border=True, key=f"recommendation_{index}"):
         recommendation_content(rec, best=index == 0)
         if st.button("Завершить активность" if index == 0 else "Завершить эту активность",
-                     key=f'complete_{view["employee"]["employee_id"]}_{rec["event_id"]}', type="primary" if index == 0 else "secondary", width="stretch"):
+                     key=f'complete-{view["employee"]["employee_id"]}-{rec["event_id"]}', type="primary" if index == 0 else "secondary", width="stretch"):
             try:
                 finish_activity(adapter, view["employee"]["employee_id"], rec, view)
             except Exception as exc:
@@ -63,6 +63,7 @@ def render_employee(adapter, employee_id):
     employee = view["employee"]
     page_heading("Ваш следующий шаг", f'{employee.get("full_name", "Сотрудник")} · {employee.get("role", "")} · Развитие в вашем темпе')
     journey(view)
+    st.caption(view.get("ai_status", "Детерминированный расчёт"))
     if not view.get("next_grade"):
         st.caption("Для текущей роли следующего грейда нет. Индивидуальную цель развития можно обсудить с руководителем.")
     route, skills_tab, history_tab = st.tabs(["Мой маршрут", "Навыки и требования", "История участия"])
@@ -142,6 +143,8 @@ def render_hr(adapter, employees):
                 html(f'<div class="cq-bar-row"><div class="cq-bar-title"><span>{e(gap.get("name", "Навык"))}</span><strong>{e(count)}</strong></div><div class="cq-bar"><i style="width:{100 * float(count) / maximum}%"></i></div></div>')
         else:
             empty_state("Разрывов не найдено", "По текущим данным нет неудовлетворённых требований следующего грейда.")
+        with st.expander(f"Все разрывы по навыкам · {len(gaps)}"):
+            st.dataframe([{"Навык": row["name"], "Сотрудников": row.get("employee_count", 0)} for row in gaps], hide_index=True, width="stretch")
     with right, st.container(border=True, key="hr_support"):
         st.subheader("Нужен индивидуальный план")
         st.caption("Список для поддержки сотрудника. Порядок — по имени.")
@@ -152,9 +155,9 @@ def render_hr(adapter, employees):
         else:
             empty_state("Маршруты доступны", "Движок не выделил сотрудников, которым требуется индивидуальный следующий шаг.")
     st.subheader("Участие по активностям")
-    st.caption("Участники — уникальные сотрудники. Завершения — записи истории; повторное участие в клубе считается отдельной записью.")
+    st.caption("Количество записей истории, включая отказы и повторные участия. Завершения — записи со статусом «Завершено».")
     if participation:
-        st.dataframe([{"Активность": row.get("title", row.get("event_id", "")), "Участников": row.get("participants", 0),
+        st.dataframe([{"Активность": row.get("title", row.get("event_id", "")),
                        "Записей участия": row.get("records", 0), "Завершений": row.get("completed", 0)} for row in participation], hide_index=True, width="stretch")
     else:
         empty_state("Участие ещё не зафиксировано", "Загрузите историю или завершите активность на экране сотрудника.")
@@ -222,7 +225,7 @@ def main():
         st.stop()
     with st.sidebar:
         html('<div class="cq-brand"><div class="cq-mark">cq</div><div><strong>Career Quest</strong><small>HALYK · РАЗВИТИЕ</small></div></div><div class="cq-rule"></div>')
-        mode = st.radio("Демонстрационный режим", ["Сотрудник", "HR", "Данные жюри"], key="mode")
+        mode = st.radio("Демонстрационный режим", ["Сотрудник", "HR", "Импорт данных"], key="mode")
         st.caption("Переключение для показа MVP. Это не разграничение доступа.")
         html('<div class="cq-rule"></div>')
         choices = {emp["employee_id"]: emp for emp in employees}
@@ -249,7 +252,7 @@ def main():
     if "flash" in st.session_state:
         st.success(st.session_state.pop("flash"))
     try:
-        if mode == "Данные жюри":
+        if mode == "Импорт данных":
             render_import(adapter, employees)
         elif mode == "HR":
             render_hr(adapter, employees)

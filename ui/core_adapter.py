@@ -42,7 +42,11 @@ def _explanation_fields(rec, view):
     status = str(rec.get("ai_status", ai_meta.get("status", global_ai.get("status", "")))).lower()
     source = str(rec.get("explanation_source", ai_meta.get("source", ""))).lower()
     failed = status in {"timeout", "timed_out", "error", "failed", "fallback", "unavailable"}
+    reasons = rec.get("reasons", [])
     fallback = _text(rec.get("deterministic_explanation") or rec.get("fallback_explanation"))
+    # The current core returns verified personal reasons, not free LLM prose.
+    # Quoting its first reason is presentation, not a second explanation engine.
+    fallback = fallback or (_text(reasons[0]) if reasons else "")
     explanation = _text(rec.get("explanation"))
     ai_text = _text(ai)
     if failed:
@@ -81,8 +85,7 @@ class CoreAdapter:
             except ModuleNotFoundError as exc:
                 if exc.name not in {"core", "core.api"}:
                     raise AdapterError(f"Для core/ не установлена зависимость: {exc.name}.") from exc
-                from ui import demo_adapter
-                module = demo_adapter
+                raise AdapterError("Не найден core/api.py. Подтяните файлы движка и перезапустите приложение.") from exc
         missing = [name for name in REQUIRED_API if not callable(getattr(module, name, None))]
         if missing:
             raise AdapterError("В core.api отсутствуют функции: " + ", ".join(missing))
@@ -92,6 +95,8 @@ class CoreAdapter:
         try:
             payload = json.loads((self.data_dir / "skills.json").read_text(encoding="utf-8-sig"))
             self.catalog = {s["skill_id"]: s for s in payload["skills"]}
+            self.role_profiles = payload["role_profiles"]
+            self.as_of_date = payload.get("meta", {}).get("as_of_date", "2026-10-01")
             event_payload = json.loads((self.data_dir / "events.json").read_text(encoding="utf-8-sig"))
             self.events = {e["event_id"]: e for e in event_payload["events"]}
         except (OSError, ValueError, KeyError) as exc:
@@ -104,23 +109,36 @@ class CoreAdapter:
         return self.api.load_dataset(str(self.data_dir))
 
     def list_employees(self, dataset):
-        return self.api.list_employees(dataset)
+        return [dict(row, full_name=row.get("full_name", row.get("name", row["employee_id"])))
+                for row in self.api.list_employees(dataset)]
 
     def get_employee_view(self, dataset, employee_id):
         view = deepcopy(self.api.get_employee_view(dataset, employee_id))
         employee = view["employee"]
+        employee["full_name"] = employee.get("full_name", employee.get("name", employee_id))
+        view["ai_status"] = "Предпросмотр UI" if self.is_demo else "Детерминированный расчёт"
+        if not self.is_demo and self.api.__name__ == "core.api":
+            try:
+                view["ai_status"] = importlib.import_module("core.ai").LAST_STATUS.get()
+            except (ImportError, AttributeError):
+                pass
+        status = view["ai_status"]
+        view.setdefault("ai", {"status": "fallback" if status.startswith("Fallback") else "ok" if status.startswith("AI ·") else "disabled", "description": status})
         next_value = view.get("next_grade")
         target = next_value if isinstance(next_value, dict) else {}
         view["next_grade"] = target.get("grade", target.get("target_grade")) if target else next_value
         view["target_role"] = target.get("role", employee.get("role", ""))
+        role_profile = next((p for p in self.role_profiles if p["role"] == view["target_role"]
+                             and p["grade"] == (view["next_grade"] or employee.get("grade"))), {})
+        critical_ids = set(role_profile.get("critical_skills", []))
         skills = []
         for item in _rows(view.get("skills"), "skill_id"):
             sid = item["skill_id"]
             current = item.get("current", item.get("current_level", item.get("level", 0)))
             required = item.get("required", item.get("required_level", item.get("target_level", 0)))
-            skills.append({**item, "name": item.get("name") or self.skill_name(sid), "current": current,
+            skills.append({**item, "name": item.get("name") or item.get("label") or self.skill_name(sid), "current": current,
                            "required": required, "gap": max(0, required - current),
-                           "critical": bool(item.get("critical", item.get("is_critical", False))),
+                           "critical": bool(item.get("critical", item.get("is_critical", sid in critical_ids))),
                            "type": item.get("type", self.catalog.get(sid, {}).get("type", "hard"))})
         view["skills"] = sorted(skills, key=lambda s: (s["gap"] <= 0, not s["critical"], -s["gap"], s["name"]))
         total_required = sum(s["required"] for s in skills)
@@ -128,7 +146,7 @@ class CoreAdapter:
         trajectory = view.get("trajectory") or {}
         if not isinstance(trajectory, dict):
             trajectory = {"steps": trajectory}
-        trajectory.setdefault("progress_pct", readiness)
+        trajectory.setdefault("progress_pct", trajectory.get("progress_percent", readiness))
         trajectory.setdefault("gap_count", sum(s["gap"] > 0 for s in skills))
         view["trajectory"] = trajectory
         recommendations = []
@@ -145,7 +163,7 @@ class CoreAdapter:
                 sid = change["skill_id"]
                 before = change.get("before", change.get("current", employee.get("skills", {}).get(sid, 0)))
                 after = change.get("after", change.get("expected_level", before + change.get("gain", 0)))
-                changes.append({**change, "name": change.get("name") or self.skill_name(sid),
+                changes.append({**change, "name": change.get("name") or change.get("label") or self.skill_name(sid),
                                 "before": before, "after": after, "gain": after - before})
             rec["skill_changes"] = changes
             rec.update(_explanation_fields(rec, view))
@@ -185,6 +203,8 @@ class CoreAdapter:
                 rows = payload.get("employees") if isinstance(payload, dict) else payload
                 if not isinstance(rows, list) or not rows or not all(isinstance(r, dict) for r in rows):
                     raise AdapterError('JSON должен содержать непустой массив сотрудников: {"employees": [...]} или [...].')
+                if isinstance(payload, list):
+                    employees_bytes = json.dumps({"employees": rows}, ensure_ascii=False).encode("utf-8")
             if history_bytes:
                 reader = csv.DictReader(io.StringIO(history_bytes.decode("utf-8-sig")))
                 required = {"record_id", "employee_id", "event_id", "date", "status", "completion_pct"}
@@ -210,5 +230,9 @@ class CoreAdapter:
     def get_hr_view(self, dataset):
         result = deepcopy(self.api.get_hr_view(dataset))
         for row in result.get("skill_gaps", []):
-            row.setdefault("name", self.skill_name(row.get("skill_id", "")))
+            row.setdefault("name", row.get("label") or self.skill_name(row.get("skill_id", "")))
+        blocked = result.get("employees_without_next_step", result.get("employees_without_recommendations", []))
+        result["employees_without_next_step"] = [dict(row, full_name=row.get("full_name", row.get("name", row.get("employee_id", "")))) for row in blocked]
+        rows = result.get("participation", result.get("activity_participation", []))
+        result["participation"] = [dict(row, records=row.get("records", row.get("participations", 0))) for row in rows]
         return result
