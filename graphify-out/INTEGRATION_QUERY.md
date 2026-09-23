@@ -1,88 +1,120 @@
-# UI → core → AI integration query
+# HR growth integration query
 
-Question: How does an employee view reach optional AI, and which operations
-preserve deterministic facts?
+Question: How do HR approval, XP, persistent records and explicit AI research
+connect, and can viewing a profile trigger paid research?
 
-Query vocabulary is selected from the graph's labels: `adapter`, `api`,
-`engine`, `refine`, `request`.
+Expanded from actual graph vocabulary: `certificate`, `snapshot`, `recommend`,
+`budget`, `reservations`, `baseline`, `managed`.
 
-The broad CLI traversal is budget-limited in `integration_query_raw.txt`.
-The complete call path below was separately checked against every edge in the
-saved graph, including nodes omitted from that truncated CLI display.
+The CLI traversal in `integration_query_raw.txt` is budget-limited. The four
+critical paths below were also validated against every edge of the full graph.
 
-## Confirmed normal-mode call path
+## Profile views use the deterministic baseline
 
 ```text
 app.employee_view
   → CoreAdapter.get_employee_view
-  → core.api.get_employee_view
-  → core.engine.get_employee_view
-  → core.ai.refine
-  → core.ai._bounded_request
-  → work (thread callback)
-  → core.ai._request
+  → GrowthService.baseline_view
+  → engine.get_employee_view(use_ai=False)
 ```
 
-The engine → `ai.refine` and internal AI call relationships come from Graphify
-AST extraction. The app's injected adapter calls, `self.api` dispatch, and
-conditional API → engine dispatch were verified in source and added as semantic
-`calls` edges with **EXTRACTED, confidence 1.0**. They describe `CoreAdapter`
-loading `core.api` and non-demo datasets. `__demo__` and test-injected modules are
-alternative branches. The thread callback is AST `indirect_call`.
+`app.main` sets `adapter.managed_ai=True`. The adapter's managed branch uses the
+growth service's deterministic baseline. The graph also contains the preserved
+legacy `core.api → core.engine → core.ai.refine` source path; that possible call
+does not mean it executes during managed UI navigation.
 
-Sources/locations in the graph: `app.py` / `employee_view`; `ui/core_adapter.py` /
-`CoreAdapter.get_employee_view / self.api.get_employee_view`; `core/api.py` /
-`get_employee_view / engine branch when dataset is not __demo__`;
-`core/engine.py` / `L181`; `core/ai.py` / `L94`, `L63`, `L58`.
+Sources: `app.py` / `main`, `employee_view`; `ui/core_adapter.py` /
+`CoreAdapter.get_employee_view / managed_ai branch`; `core/growth.py` /
+`GrowthService.baseline_view / engine.get_employee_view(use_ai=False)`.
 
-## What remains deterministic
+## Research requires the explicit button
 
-The core computes eligibility, score, skill gains, grade requirements and
-progress before optional AI. AI may select within three near-tied candidates
-and reorder existing reason indices. It cannot invent new reason text, scores,
-skills or gains; invalid outputs return the baseline list.
+```text
+ui.growth_views.render_tracks
+  → GrowthService.recommend
+  → GrowthAdvisor.recommend
+  → _bounded_http
+  → worker (thread callback)
+  → _http
+```
 
-Sources: `CORE_NOTES.md` / `Формулы и соглашения`, `LLM`;
-`core/engine.py` / `get_employee_view`;
-`core/ai.py` / `refine`.
+The first call uses `generate=False`, returning a valid cached plan or a ready
+state. The research button passes `generate=True`. Missing configuration returns
+an unavailable state; it does not invent courses. Before network access the
+advisor checks the request bound, starts a SQLite transaction, checks shared
+spending and reserves the entire request cap in `ai_calls`.
 
-The UI reads engine output and AI status, formats labels and explanation fields,
-and performs no provider HTTP request itself. Provider requests remain in
-`core.ai._request`. Provider availability is not demonstrated by a source graph;
-README/CORE_NOTES explicitly report mocked verification and untested live APIs.
+The implemented caps are $5 per application database and $0.10 per request,
+with environment overrides permitted only downward. One web search and at most
+3,000 output tokens are requested; the caller waits at most 28 seconds. Usage
+is charged conservatively and unknown cost retains the reservation. These are
+implementation facts, not a claim about an OpenAI account's actual balance or
+an independent verification of current provider tariffs.
 
-## Mutation and HR boundaries
+Source: `ui/growth_views.py` / `render_tracks`; `core/growth.py` /
+`GrowthService.recommend`; `core/growth_ai.py` / `GrowthAdvisor.recommend`,
+`limits`, `request_payload`, `_bounded_http`.
 
-`CoreAdapter.complete_activity` copies the dataset, calls the public completion
-API, then re-queries the employee view before adopting the result. The engine's
-completion uses `use_ai=False`; the UI's subsequent view refresh may reach
-optional AI. Therefore “completion does not call AI” is true of the engine
-mutation itself, not necessarily the complete UI interaction.
+Returned course URLs must match a returned search source and an allowed provider
+domain. Portfolio fingerprints and a seven-day cache determine whether a plan
+can be reused; `request_training` rejects stale or mismatched plans. The graph
+does not establish live API availability: no external API was called here.
+
+Source: `core/growth_ai.py` / `validate_response`, `fingerprint`;
+`core/growth.py` / `GrowthService.request_training`.
+
+## HR approval changes the confirmed portfolio
+
+```text
+render_hr_requests
+  → GrowthService.review_certificate
+  → certificates SQLite table
+  → GrowthService.snapshot
+```
+
+Submission creates a pending certificate without skill awards or learning XP.
+An HR approval records selected 0–1 skill awards. `snapshot` applies approved
+awards, caps levels at 5, and computes 100 learning XP per approved certificate
+plus 10 tenure XP per full day. The game level is `1 + xp // 1000`; it is separate
+from job grade. A reviewed certificate cannot be reviewed again, and course
+fingerprints prevent another credit for the same employee/course.
+
+Sources: `core/growth.py` / `submit_certificate`, `review_certificate`,
+`snapshot`; `README.md` / `Сценарий сотрудника и HR`.
+
+Training-request approval is a separate HR decision. It performs no purchase
+and adds neither completion nor XP. Profile, certificate, plan, request and
+spending tables are represented from SQL declarations only. Runtime SQLite
+records were excluded from detection and never read.
+
+Source: `core/growth.py` / `GrowthStore.__init__`, `request_training`,
+`decide_training`.
+
+## Starter-kit simulation stays outside approved learning
+
+```text
+CoreAdapter.complete_activity
+  → GrowthService.preserve_baseline_before_simulation
+  → session dataset _growth_baselines
+```
+
+The legacy engine can mutate assessed skills when assessment and snapshot dates
+coincide. The managed adapter preserves initial skills before that mutation.
+The growth snapshot uses the saved baseline and excludes `UI_` history rows,
+so a simulated route completion cannot become an HR-approved certificate gain.
+The legacy route itself continues to update the session dataset.
 
 Sources: `ui/core_adapter.py` / `CoreAdapter.complete_activity`;
-`core/engine.py` / `complete_activity`.
+`core/growth.py` / `preserve_baseline_before_simulation`, `snapshot`.
 
-`CoreAdapter.import_test_data` stages uploads in a temporary directory, invokes
-the public import API on a copy and checks employee enumeration before returning
-new data. `core.engine.import_test_data` validates the combined profiles/history.
+## Coverage and limitations
 
-Sources: `ui/core_adapter.py` / `CoreAdapter.import_test_data`;
-`core/engine.py` / `import_test_data`, `validate`.
-
-HR invokes `core.engine.get_hr_view`; per-employee views inside HR use
-`use_ai=False`, so bulk HR aggregation does not issue AI requests.
-
-Sources: `core/api.py` / `get_hr_view`; `core/engine.py` / `get_hr_view`.
-
-## Graph limitations
-
-Graphify AST does not extract individual JSON dataset entities or CSV records;
-those contracts are represented from reviewed dataset READMEs. Dynamic method
-dispatch requires reviewed semantic bridges. Import targets are represented by
-typed namespace stubs; raw extraction warnings and final graph integrity are
-reported separately in `GRAPH_HEALTH.md`. Ordinary undirected export collapses
-some multiple relationships on identical endpoints; exact details remain in
-`diagnostics.json` and portable `extraction.json` (246 nodes, 531 raw edges before
-import stubs and endpoint collapse). The source graph describes
-possible calls, not runtime execution coverage. Host model token usage is
-unavailable and is never reported as measured zero.
+Graphify AST does not resolve all injected adapter/property calls. Those edges
+were source-reviewed and marked `EXTRACTED`, confidence 1.0, with their branch
+conditions. Ordinary undirected export collapses some relationships sharing
+endpoints; `extraction.json` retains every raw edge and `GRAPH_HEALTH.md` shows
+both raw and final diagnostics. Import stubs are namespace references, not
+runtime call evidence. JSON/CSV dataset records are not individual graph nodes;
+their schema is represented from reviewed READMEs. Actual Graphify host-session
+token usage is unavailable. No runtime DB, environment files, secrets, paid API
+calls, application edits or Git mutations were part of this graph update.

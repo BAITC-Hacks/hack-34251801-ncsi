@@ -1,0 +1,21 @@
+{
+  "status": "passed",
+  "nodes": 415,
+  "edges": 955,
+  "covered_sources": 39,
+  "raw_declared_nodes": 376,
+  "raw_edges": 968,
+  "raw_import_endpoint_edges": 165,
+  "collapsed_undirected_edges": 13,
+  "final_dangling_endpoint_edges": 0,
+  "checks": [
+    "all covered source hashes current after merge checkout",
+    "AST identical after final checkout",
+    "unique IDs and resolved exported endpoints",
+    "four HR and AI paths",
+    "portable relative source paths",
+    "runtime DB, env, secrets and virtual environments excluded"
+  ],
+  "token_usage": "unavailable",
+  "external_api_calls": 0
+}

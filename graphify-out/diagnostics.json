@@ -1,26 +1,26 @@
 {
-  "node_count": 246,
+  "node_count": 376,
   "unverified_node_count": 0,
-  "raw_edge_count": 531,
+  "raw_edge_count": 968,
   "non_object_edges": 0,
   "missing_endpoint_edges": 0,
-  "dangling_endpoint_edges": 94,
+  "dangling_endpoint_edges": 165,
   "external_reference_edges": 0,
   "self_loop_edges": 0,
-  "valid_candidate_edges": 437,
+  "valid_candidate_edges": 803,
   "exact_duplicate_edges": 0,
-  "directed_unique_endpoint_pairs": 433,
-  "directed_same_endpoint_collapsed_edges": 4,
-  "undirected_unique_endpoint_pairs": 433,
-  "undirected_same_endpoint_collapsed_edges": 4,
-  "same_endpoint_group_count": 4,
-  "relation_variant_groups": 4,
+  "directed_unique_endpoint_pairs": 790,
+  "directed_same_endpoint_collapsed_edges": 13,
+  "undirected_unique_endpoint_pairs": 790,
+  "undirected_same_endpoint_collapsed_edges": 13,
+  "same_endpoint_group_count": 13,
+  "relation_variant_groups": 13,
   "source_file_variant_groups": 0,
   "source_location_variant_groups": 0,
   "context_variant_groups": 0,
   "post_build_graph_type": "Graph",
-  "post_build_node_count": 275,
-  "post_build_edge_count": 527,
+  "post_build_node_count": 415,
+  "post_build_edge_count": 955,
   "post_build_error": "",
   "producer_suppression": {
     "path": "C:\\Users\\nnysa\\AppData\\Roaming\\uv\\tools\\graphifyy\\Lib\\site-packages\\graphify\\extract.py",
@@ -103,6 +103,26 @@
   },
   "examples": [
     {
+      "source": "app_render_employee",
+      "target": "app_render_employee_complete_map_step",
+      "edge_count": 2,
+      "relations": [
+        "contains",
+        "indirect_call"
+      ],
+      "source_files": [
+        "app.py"
+      ],
+      "source_locations": [
+        "L115",
+        "L121"
+      ],
+      "contexts": [
+        "",
+        "argument"
+      ]
+    },
+    {
       "source": "core_ai_bounded_request",
       "target": "core_ai_bounded_request_work",
       "edge_count": 2,
@@ -123,39 +143,19 @@
       ]
     },
     {
-      "source": "ui_checks_test_core_integration_coreintegrationtests_test_successful_ai_selection_keeps_facts_and_labels_its_actual_role",
-      "target": "ui_checks_test_core_integration_coreintegrationtests_test_successful_ai_selection_keeps_facts_and_labels_its_actual_role_response",
-      "edge_count": 2,
-      "relations": [
-        "contains",
-        "indirect_call"
-      ],
-      "source_files": [
-        "ui/checks/test_core_integration.py"
-      ],
-      "source_locations": [
-        "L59",
-        "L63"
-      ],
-      "contexts": [
-        "",
-        "argument"
-      ]
-    },
-    {
-      "source": "ui_demo_adapter_load_dataset",
-      "target": "ui_demo_adapter_load_dataset_read",
+      "source": "core_growth_ai_limits",
+      "target": "core_growth_ai_limits_amount",
       "edge_count": 2,
       "relations": [
         "calls",
         "contains"
       ],
       "source_files": [
-        "ui/demo_adapter.py"
+        "core/growth_ai.py"
       ],
       "source_locations": [
-        "L21",
-        "L23"
+        "L32",
+        "L40"
       ],
       "contexts": [
         "",
@@ -163,22 +163,43 @@
       ]
     },
     {
-      "source": "app_main",
-      "target": "ui_core_adapter_coreadapter",
+      "source": "core_growth_ai_schema",
+      "target": "core_growth_ai_schema_obj",
       "edge_count": 2,
       "relations": [
         "calls",
-        "uses"
+        "contains"
       ],
       "source_files": [
-        "app.py"
+        "core/growth_ai.py"
       ],
       "source_locations": [
-        "L215"
+        "L54",
+        "L57"
       ],
       "contexts": [
         "",
         "call"
+      ]
+    },
+    {
+      "source": "core_growth_ai_bounded_http",
+      "target": "core_growth_ai_bounded_http_worker",
+      "edge_count": 2,
+      "relations": [
+        "contains",
+        "indirect_call"
+      ],
+      "source_files": [
+        "core/growth_ai.py"
+      ],
+      "source_locations": [
+        "L109",
+        "L116"
+      ],
+      "contexts": [
+        "",
+        "argument"
       ]
     }
   ]
