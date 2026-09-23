@@ -12,6 +12,7 @@ import streamlit as st
 
 from ui.components import STATUSES, e, empty_state, html, journey, number, page_heading, recommendation_content, skill_card, stat
 from ui.core_adapter import AdapterError, CoreAdapter
+from ui.development_map import render_development_map
 
 ROOT = Path(__file__).resolve().parent
 DATA_DIR = Path(os.environ.get("CAREER_QUEST_DATA_DIR", str(ROOT / "case/case_1/career_quest_dataset")))
@@ -43,6 +44,9 @@ def finish_activity(adapter, employee_id, rec, current_view):
     st.session_state.dataset = updated
     st.session_state.revision += 1
     st.session_state.views = {(st.session_state.revision, employee_id): view}
+    completions = st.session_state.setdefault("map_completions", {})
+    completions[employee_id] = {"event_id": rec["event_id"], "before": before,
+                                "after": {s["skill_id"]: s["current"] for s in view["skills"]}}
     st.session_state.flash = f'Активность «{rec["title"]}» завершена. ' + (" · ".join(changes) if changes else "Профиль и рекомендации пересчитаны.")
     st.rerun()
 
@@ -66,7 +70,7 @@ def render_employee(adapter, employee_id):
     st.caption(view.get("ai_status", "Детерминированный расчёт"))
     if not view.get("next_grade"):
         st.caption("Для текущей роли следующего грейда нет. Индивидуальную цель развития можно обсудить с руководителем.")
-    route, skills_tab, history_tab = st.tabs(["Мой маршрут", "Навыки и требования", "История участия"])
+    route, map_tab, skills_tab, history_tab = st.tabs(["Мой маршрут", "Карта развития", "Навыки и требования", "История участия"], key="employee_tab", on_change="rerun")
     with route:
         recs = view["recommendations"]
         left, right = st.columns([1.95, 1], gap="large")
@@ -93,6 +97,14 @@ def render_employee(adapter, employee_id):
                 else:
                     st.caption("Разрывов до цели по данным движка нет.")
                 html('<div class="cq-rule"></div><p class="cq-help">Уровни по шкале 0–5. Выполнение требований по навыкам помогает обсудить рост, но не означает автоматического повышения.</p>')
+    with map_tab:
+        def complete_map_step(rec):
+            try:
+                finish_activity(adapter, employee_id, rec, view)
+            except Exception as exc:
+                show_error(exc, "завершить активность")
+        if map_tab.open:
+            render_development_map(adapter, view, complete_map_step)
     with skills_tab:
         st.subheader("Навыки на пути к цели")
         st.caption("Текущий уровень учитывает завершённое обучение. Требования — из профиля следующего грейда.")
@@ -185,6 +197,7 @@ def render_import(adapter, employees):
                 st.session_state.dataset = updated
                 st.session_state.revision += 1
                 st.session_state.views = {}
+                st.session_state.map_completions = {}
                 if new_ids:
                     st.session_state.pending_employee = new_ids[0]
                 st.session_state.flash = f"Импорт завершён. Новых сотрудников: {len(new_ids)}. История учтена движком. Перейдите в режим «Сотрудник»."
