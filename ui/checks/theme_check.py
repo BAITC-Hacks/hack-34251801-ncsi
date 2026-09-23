@@ -48,6 +48,9 @@ TEXT = ", ".join([
 
 def readable_text(page):
     readings = []
+    for caption in page.locator('[data-testid="stCaptionContainer"]').all():
+        if caption.is_visible():
+            assert caption.evaluate('el => el.getBoundingClientRect().bottom <= el.parentElement.getBoundingClientRect().bottom + 1'), 'Caption extends below its layout box and may overlap the next control'
     for element in page.locator(TEXT).all():
         if element.is_visible():
             reading = element.evaluate(CONTRAST)

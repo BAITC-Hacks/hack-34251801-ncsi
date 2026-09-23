@@ -115,14 +115,15 @@ def render_tracks(adapter, dataset, employee_id):
     st.subheader('В какую сторону расти')
     st.caption('AI учитывает подтверждённые сертификаты, навыки и цель. Глубокая специализация даёт следующий уровень; смешанный опыт — несколько направлений.')
     result = adapter.growth.recommend(dataset, employee_id)
-    budget = result['budget']
-    st.caption(f"Бюджет поиска: ${budget['used']:.3f} из ${budget['limit']:.2f} учтено / зарезервировано. До ${budget['per_request']:.2f} за запрос. Кеш — 7 дней.")
+    budget_caption = st.empty()
     if st.button('Подобрать треки и найти курсы', key=f'research-{employee_id}', type='primary'):
         with st.spinner('Анализируем подтверждённый опыт и ищем реальные курсы…'):
             try:
                 result = adapter.growth.recommend(dataset, employee_id, generate=True)
             except ValueError as exc:
                 st.error(str(exc))
+    budget = result['budget']
+    budget_caption.caption(f"Бюджет поиска: {budget['used']:.3f} USD из {budget['limit']:.2f} USD учтено / зарезервировано. До {budget['per_request']:.2f} USD за запрос. Кеш — 7 дней.")
     if result.get('message'):
         st.info(result['message'])
     if result.get('summary'):
@@ -228,4 +229,4 @@ def render_hr_requests(adapter, dataset, employees):
             st.write(f"{names[row['employee_id']]} · {row['payload']['title']} · {STATUS[row['status']]}")
             st.caption(row['reason'] or 'Подтверждено HR')
     budget = adapter.growth.budget()
-    st.caption(f"AI: ${budget['used']:.3f} учтено / зарезервировано из ${budget['limit']:.2f}. Новый запрос — до ${budget['per_request']:.2f}.")
+    st.caption(f"AI: {budget['used']:.3f} USD учтено / зарезервировано из {budget['limit']:.2f} USD. Новый запрос — до {budget['per_request']:.2f} USD.")
