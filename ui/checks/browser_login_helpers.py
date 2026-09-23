@@ -22,7 +22,7 @@ def login_demo(page, role="employee", employee_id="E0001"):
     label = ROLE_LABELS[role]
     enter = page.get_by_role("button", name="Войти в деморежим →", exact=True)
     expect(enter).to_be_visible()
-    page.locator(".st-key-cq_demo_role").get_by_role("button", name=label, exact=True).click()
+    page.locator(".st-key-cq_demo_role").get_by_role("radio", name=label, exact=True).click()
     expect(page.locator(".st-key-cq_auth_card").get_by_role(
         "heading", name=ROLE_HEADINGS[role], exact=True)).to_be_visible()
     if role == "employee":

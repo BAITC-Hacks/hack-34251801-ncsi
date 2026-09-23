@@ -112,8 +112,8 @@ def main():
                 page.get_by_role('tab', name='Треки и курсы', exact=True).click()
                 expect(page.get_by_role('heading', name='SOC: следующий уровень', exact=True)).to_be_visible()
                 page.screenshot(path=str(output / 'tracks-mocked-search.png'), full_page=True)
-                page.get_by_role('button', name='Хочу на этот курс', exact=True).click()
-                expect(page.get_by_text('Запрос на обучение отправлен HR. Оплата не выполнялась.', exact=True)).to_be_visible()
+                page.get_by_role('button', name='Хочу этот курс', exact=True).click()
+                expect(page.get_by_text('Курс добавлен в маршрут. Заявка отправлена HR.', exact=True)).to_be_visible()
                 switch_demo_role(page, 'hr')
                 page.get_by_role('tab', name='Заявки и решения', exact=True).click()
                 page.get_by_label('Решение по бюджету', exact=True).click()
@@ -122,8 +122,8 @@ def main():
                 page.get_by_role('button', name='Отправить решение сотруднику', exact=True).click()
                 expect(page.get_by_text('Решение по обучению отправлено сотруднику.', exact=True)).to_be_visible()
                 switch_demo_role(page, 'employee', 'E0001')
-                page.get_by_role('tab', name='Треки и курсы', exact=True).click()
-                expect(page.get_by_text('Нет бюджета: Вернёмся в следующем квартале', exact=True)).to_be_visible()
+                page.get_by_role('tab', name='Мой маршрут', exact=True).click()
+                expect(page.get_by_text('HR: Нет бюджета: Вернёмся в следующем квартале', exact=True)).to_be_visible()
                 page.screenshot(path=str(output / 'employee-decision.png'), full_page=True)
                 assert service.store.rows('training_requests')[0]['status'] == 'rejected'
                 assert service.snapshot(data, 'E0001')['xp'] == 300

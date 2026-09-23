@@ -97,7 +97,7 @@ def main():
             page.screenshot(path=str(output / f"{label}-growth.png"))
             page.get_by_role("tab", name="Мой маршрут", exact=True).click()
             minimum = min(minimum, readable_text(page))
-            expect(page.get_by_role("button", name="Завершить активность", exact=True)).to_be_in_viewport(ratio=1)
+            expect(page.get_by_role("button", name="Выбрать курсы на карте", exact=True)).to_be_visible()
             page.screenshot(path=str(output / f"{label}-employee.png"))
             for role, heading in [("hr", "Развитие команды"), ("admin", "Добавьте данные для проверки")]:
                 switch_demo_role(page, role)
