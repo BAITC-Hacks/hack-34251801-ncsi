@@ -1,0 +1,185 @@
+{
+  "node_count": 246,
+  "unverified_node_count": 0,
+  "raw_edge_count": 531,
+  "non_object_edges": 0,
+  "missing_endpoint_edges": 0,
+  "dangling_endpoint_edges": 94,
+  "external_reference_edges": 0,
+  "self_loop_edges": 0,
+  "valid_candidate_edges": 437,
+  "exact_duplicate_edges": 0,
+  "directed_unique_endpoint_pairs": 433,
+  "directed_same_endpoint_collapsed_edges": 4,
+  "undirected_unique_endpoint_pairs": 433,
+  "undirected_same_endpoint_collapsed_edges": 4,
+  "same_endpoint_group_count": 4,
+  "relation_variant_groups": 4,
+  "source_file_variant_groups": 0,
+  "source_location_variant_groups": 0,
+  "context_variant_groups": 0,
+  "post_build_graph_type": "Graph",
+  "post_build_node_count": 275,
+  "post_build_edge_count": 527,
+  "post_build_error": "",
+  "producer_suppression": {
+    "path": "C:\\Users\\nnysa\\AppData\\Roaming\\uv\\tools\\graphifyy\\Lib\\site-packages\\graphify\\extract.py",
+    "total_sites": 12,
+    "sites": [
+      {
+        "line": 1349,
+        "name": "seen_ids",
+        "tuple_arity": 0,
+        "sample": "seen_ids = {n[\"id\"] for n in nodes}"
+      },
+      {
+        "line": 1882,
+        "name": "seen_ids",
+        "tuple_arity": 0,
+        "sample": "seen_ids = {n[\"id\"] for n in nodes}"
+      },
+      {
+        "line": 1884,
+        "name": "seen_doc_refs",
+        "tuple_arity": 0,
+        "sample": "seen_doc_refs: set[str] = set()"
+      },
+      {
+        "line": 2254,
+        "name": "seen_ids",
+        "tuple_arity": 0,
+        "sample": "seen_ids: set[str] = {n[\"id\"] for n in nodes}"
+      },
+      {
+        "line": 2401,
+        "name": "seen_ids",
+        "tuple_arity": 0,
+        "sample": "seen_ids = {n.get(\"id\") for n in nodes}"
+      },
+      {
+        "line": 3127,
+        "name": "seen_keys",
+        "tuple_arity": 0,
+        "sample": "seen_keys: set[tuple] = set()"
+      },
+      {
+        "line": 3296,
+        "name": "seen_keys",
+        "tuple_arity": 0,
+        "sample": "seen_keys: set[tuple] = set()"
+      },
+      {
+        "line": 5370,
+        "name": "seen_ids",
+        "tuple_arity": 0,
+        "sample": "seen_ids: set[str] = set()"
+      },
+      {
+        "line": 5478,
+        "name": "seen_ids",
+        "tuple_arity": 0,
+        "sample": "seen_ids: set[str] = set()"
+      },
+      {
+        "line": 5557,
+        "name": "seen_ids",
+        "tuple_arity": 0,
+        "sample": "seen_ids: set[str] = set()"
+      },
+      {
+        "line": 6072,
+        "name": "seen_ids",
+        "tuple_arity": 0,
+        "sample": "seen_ids: set[str] = set()"
+      },
+      {
+        "line": 6073,
+        "name": "seen_edges",
+        "tuple_arity": 4,
+        "sample": "seen_edges: set[tuple[str, str, str, str | None]] = set()"
+      }
+    ],
+    "error": ""
+  },
+  "examples": [
+    {
+      "source": "core_ai_bounded_request",
+      "target": "core_ai_bounded_request_work",
+      "edge_count": 2,
+      "relations": [
+        "contains",
+        "indirect_call"
+      ],
+      "source_files": [
+        "core/ai.py"
+      ],
+      "source_locations": [
+        "L56",
+        "L63"
+      ],
+      "contexts": [
+        "",
+        "argument"
+      ]
+    },
+    {
+      "source": "ui_checks_test_core_integration_coreintegrationtests_test_successful_ai_selection_keeps_facts_and_labels_its_actual_role",
+      "target": "ui_checks_test_core_integration_coreintegrationtests_test_successful_ai_selection_keeps_facts_and_labels_its_actual_role_response",
+      "edge_count": 2,
+      "relations": [
+        "contains",
+        "indirect_call"
+      ],
+      "source_files": [
+        "ui/checks/test_core_integration.py"
+      ],
+      "source_locations": [
+        "L59",
+        "L63"
+      ],
+      "contexts": [
+        "",
+        "argument"
+      ]
+    },
+    {
+      "source": "ui_demo_adapter_load_dataset",
+      "target": "ui_demo_adapter_load_dataset_read",
+      "edge_count": 2,
+      "relations": [
+        "calls",
+        "contains"
+      ],
+      "source_files": [
+        "ui/demo_adapter.py"
+      ],
+      "source_locations": [
+        "L21",
+        "L23"
+      ],
+      "contexts": [
+        "",
+        "call"
+      ]
+    },
+    {
+      "source": "app_main",
+      "target": "ui_core_adapter_coreadapter",
+      "edge_count": 2,
+      "relations": [
+        "calls",
+        "uses"
+      ],
+      "source_files": [
+        "app.py"
+      ],
+      "source_locations": [
+        "L215"
+      ],
+      "contexts": [
+        "",
+        "call"
+      ]
+    }
+  ]
+}

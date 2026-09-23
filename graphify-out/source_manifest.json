@@ -1,0 +1,66 @@
+{
+  "snapshot_kind": "Working tree source snapshot; documentation may be uncommitted at generation time.",
+  "sources": {
+    "app.py": "a9dbadd7f8e3f7b71d9593657d5ffc2c4006e62f33f37aec74bc52c6c1806ec7",
+    "case/case_1/career_quest_dataset/employees.json": "b362fc3f3e6901dfc52c831ff987709fe08edd9212fd1132eadf999f0e50315a",
+    "case/case_1/career_quest_dataset/events.json": "2cbca22918155e384cb9ee80ac8b47c777dc97c8acc4914d7c3ac508b4ccd97a",
+    "case/case_1/career_quest_dataset/skills.json": "5bf2ba4ef6c47226489be5e34f7fb4f7f518d7755a2c60e3a5f678aa4db2025b",
+    "core/__init__.py": "4816f04d2cc8cfb51e4a266e5b63f60ae0b719e1ba378c2a575445147d603341",
+    "core/ai.py": "cd0d562846999d44c2346d05648d29bda2b26db6b82d73d1a8e47e2f03c67dfa",
+    "core/api.py": "351d703ea8f558a827a032b8bffd8579a75d2a295897cc9aef9bc86926ab9e40",
+    "core/demo.py": "d3cc29933a6e13e4c03f7695d4cfc3c95e5b22c160a3f019f00d5202dd109b88",
+    "core/engine.py": "d34bbeeae4e525b0c67e60f12f5c117bf552a430dfc48b1f0061c73edf66bb60",
+    "tests/test_ai.py": "a9d348989ff379f399e328effbd31c127e1bbfe3b6b5554c0364e62f0767c9dd",
+    "tests/test_demo_api.py": "36ace50e3a583fd4683043875d8f3eb4a495da67fcacecf5f7b9e27dccc820a1",
+    "tests/test_starter_kit.py": "353ad55de1ea5aa1faf599b0653edf8ff4941d8f9d0f0d33c81dc011acb8f822",
+    "tests/test_ui.py": "043b7e2a21f41c3aae984e0b3a89b0c145536162de11ee90eb228e527edee628",
+    "ui/__init__.py": "fdab07860e72b76bd94dc0747f47e7c96d856e2ca9dcef44547023e81cfce91d",
+    "ui/adapter.py": "49631fefca79f2efdc95a814bd8f476fc2c81b8950d1d92a72bbe55896a4231e",
+    "ui/checks/__init__.py": "2bd3875cc1191b3e3af7e450c4b45f4c8e713bc9920365b342b9ff517755f34f",
+    "ui/checks/browser_check.py": "8124faf8013fa741ccca44d45f0c6a1603d0bb85701b78be48124cbfcb87897f",
+    "ui/checks/test_adapter.py": "fcf2fed7729cd788d9c88f31594a446549c1e6043c845c1d12848c128e523947",
+    "ui/checks/test_app.py": "c1d842c4e875dae6f98460f4ed98bad947c94529ab24551f981fb210cdc00872",
+    "ui/checks/test_core_integration.py": "fcffe8240774fdb86426fbfe131bde062ad34a9ec01e4529284dbf6ff621444d",
+    "ui/components.py": "a5cdb8616d4ae86fb52225f807a500ca6637b76515e4381914efb3113a205b13",
+    "ui/core_adapter.py": "64ee8de845f67f7a1d02233346c6810e8e45ec2537795a4fa65ab37fcefb332b",
+    "ui/demo_adapter.py": "d0665c838866e9c04199ef94c2ba2eb7850e510f60bc432f7528aff692d153af",
+    "CORE_NOTES.md": "17a7d02fb84b2a30e52ee690308e90f0e0d0ae57771a1b2518dc67f424a7647c",
+    "README.md": "be9ed4f2fab33eae3f101534d0623d8cf65b275e3fa2208d35a2d6e53d9a150c",
+    "case/case_1/career_quest_dataset/README.kz.md": "3ffa764ab6c2a8e5f8181ba9496b605b5a40721bc66801e5d289cfea4298b3e4",
+    "case/case_1/career_quest_dataset/README.md": "043c876f60eb855522678a1cef6ba2bf572d9371dafe0f02332f342559fb4ad0",
+    "case/case_1/career_quest_dataset/README.ru.md": "cc068ad7c28433243a5af5811ac56162b9397647da4e47cf8d6ce0ef138a5508",
+    "requirements.txt": "f530eca380d3c83e747b041e71a8f49451f9d92a44dbc31a535804b5f610071e",
+    "task.docx": "dc35312c0b1a94e2246eb0a3f2a9f67fca58ab55fc4a24006dc3c38bc2b2ddb9"
+  },
+  "semantic_sources": {
+    "README.md": "be9ed4f2fab33eae3f101534d0623d8cf65b275e3fa2208d35a2d6e53d9a150c",
+    "case/case_1/career_quest_dataset/README.md": "043c876f60eb855522678a1cef6ba2bf572d9371dafe0f02332f342559fb4ad0",
+    "case/case_1/career_quest_dataset/README.ru.md": "cc068ad7c28433243a5af5811ac56162b9397647da4e47cf8d6ce0ef138a5508",
+    "case/case_1/career_quest_dataset/README.kz.md": "3ffa764ab6c2a8e5f8181ba9496b605b5a40721bc66801e5d289cfea4298b3e4",
+    "task.docx": "dc35312c0b1a94e2246eb0a3f2a9f67fca58ab55fc4a24006dc3c38bc2b2ddb9",
+    "core/engine.py": "d34bbeeae4e525b0c67e60f12f5c117bf552a430dfc48b1f0061c73edf66bb60",
+    "ui/adapter.py": "49631fefca79f2efdc95a814bd8f476fc2c81b8950d1d92a72bbe55896a4231e",
+    "core/ai.py": "cd0d562846999d44c2346d05648d29bda2b26db6b82d73d1a8e47e2f03c67dfa",
+    "ui/core_adapter.py": "64ee8de845f67f7a1d02233346c6810e8e45ec2537795a4fa65ab37fcefb332b",
+    "CORE_NOTES.md": "17a7d02fb84b2a30e52ee690308e90f0e0d0ae57771a1b2518dc67f424a7647c",
+    "app.py": "a9dbadd7f8e3f7b71d9593657d5ffc2c4006e62f33f37aec74bc52c6c1806ec7",
+    "core/api.py": "351d703ea8f558a827a032b8bffd8579a75d2a295897cc9aef9bc86926ab9e40",
+    "requirements.txt": "f530eca380d3c83e747b041e71a8f49451f9d92a44dbc31a535804b5f610071e",
+    "ui/checks/browser_check.py": "8124faf8013fa741ccca44d45f0c6a1603d0bb85701b78be48124cbfcb87897f"
+  },
+  "token_usage": "unavailable",
+  "presentation_only_updates": [
+    {
+      "source_file": "app.py",
+      "change": "Empty-state label changed to Импорт данных; adapter call sites revalidated with Python AST.",
+      "sha256": "a9dbadd7f8e3f7b71d9593657d5ffc2c4006e62f33f37aec74bc52c6c1806ec7"
+    }
+  ],
+  "structurally_equivalent_updates": [
+    {
+      "source_file": "ui/checks/browser_check.py",
+      "change": "Added HR caption/table overlap assertion and scroll reset. Graphify re-extraction exactly matches prior 3 nodes and 8 edges.",
+      "sha256": "8124faf8013fa741ccca44d45f0c6a1603d0bb85701b78be48124cbfcb87897f"
+    }
+  ]
+}
