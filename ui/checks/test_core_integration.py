@@ -53,7 +53,7 @@ class CoreIntegrationTests(unittest.TestCase):
         self.assertFalse(app.error)
         view = app.session_state["views"][(0, "E0001")]
         provider.assert_not_called()
-        self.assertIn("по кнопке", view["ai_status"])
+        self.assertIn("Подтверждённый прогресс core", view["ai_status"])
         rec = view["recommendations"][0]
         self.assertFalse(rec["ai_fallback"])
         self.assertEqual(rec["reasons"], expected["recommendations"][0]["reasons"])

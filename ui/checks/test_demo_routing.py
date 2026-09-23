@@ -8,6 +8,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from streamlit.testing.v1 import AppTest
+from streamlit.runtime.state.session_state_proxy import SessionStateProxy
 from ui.checks.demo_login_helpers import (
     demo_login, demo_logout, employee_tab, hr_tab,
     isolate_demo_storage, switch_demo_role,
@@ -102,9 +103,7 @@ class DemoRoutingTests(unittest.TestCase):
         employee_tab(app, "Мой маршрут")
         key = (app.session_state["revision"], "E0002")
         before = deepcopy(app.session_state["views"][key])
-        event_id = before["recommendations"][0]["event_id"]
-        app.button(key=f"complete-E0002-{event_id}").click().run()
-        self.assertFalse(app.error)
+        self.assertFalse(any(b.key and b.key.startswith('complete-') for b in app.button))
         dataset = deepcopy(app.session_state["dataset"])
         revision = app.session_state["revision"]
         sentinel = (revision, "__stale_test_view__")
@@ -119,8 +118,8 @@ class DemoRoutingTests(unittest.TestCase):
         self.assertEqual(app.session_state["dataset"], dataset)
         switch_demo_role(app, "employee", "E0002")
         after = app.session_state["views"][(revision, "E0002")]
-        self.assertGreater(after["trajectory"]["progress_pct"], before["trajectory"]["progress_pct"])
-        self.assertEqual(len(after["history"]), len(before["history"]) + 1)
+        self.assertEqual(after["trajectory"]["progress_pct"], before["trajectory"]["progress_pct"])
+        self.assertEqual(len(after["history"]), len(before["history"]))
         self.assertNotIn(sentinel, app.session_state["views"])
         self.assertFalse(self.auth_path.exists())
 
@@ -133,14 +132,15 @@ class DemoRoutingTests(unittest.TestCase):
         # the real submit handler, adapter, import and rerun execute unchanged.
         uploaded = io.BytesIO(json.dumps({"employees": [profile]}).encode("utf-8"))
         uploaded.name = "profile.json"
-        with patch("streamlit.file_uploader", side_effect=lambda *args, **kwargs:
-                   uploaded if kwargs.get("key") == "employees_upload" else None):
+        original_get = SessionStateProxy.get
+        with patch.object(SessionStateProxy, 'get', lambda state, key, default=None:
+                          uploaded if key == 'employees_upload' else original_get(state, key, default)):
             next(button for button in app.button if button.label == "Импортировать данные").click().run()
         self.assertFalse(app.exception)
         self.assertFalse(app.error)
         self.assertEqual(len(app.session_state["dataset"]["employees"]), 201)
         self.assertEqual(app.session_state["pending_employee"], profile["employee_id"])
-        self.assertTrue(any("Импорт завершён. Новых сотрудников: 1" in item.value for item in app.success))
+        self.assertTrue(any("Импорт завершён." in item.value for item in app.success))
         self.assertFalse(self.auth_path.exists())
         demo_logout(app)
         self.assertEqual(len(app.selectbox(key="cq_demo_employee").options), 201)
@@ -160,8 +160,9 @@ class DemoRoutingTests(unittest.TestCase):
         revision = app.session_state["revision"]
         uploaded = io.BytesIO(b'{"employees": [invalid JSON')
         uploaded.name = "invalid-profile.json"
-        with patch("streamlit.file_uploader", side_effect=lambda *args, **kwargs:
-                   uploaded if kwargs.get("key") == "employees_upload" else None):
+        original_get = SessionStateProxy.get
+        with patch.object(SessionStateProxy, 'get', lambda state, key, default=None:
+                          uploaded if key == 'employees_upload' else original_get(state, key, default)):
             next(button for button in app.button if button.label == "Импортировать данные").click().run()
         self.assertFalse(app.exception)
         self.assertEqual(len(app.error), 1)

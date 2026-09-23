@@ -1,4 +1,5 @@
 import os
+import time
 import tempfile
 import unittest
 from datetime import date, timedelta
@@ -83,11 +84,17 @@ class GrowthUIFlowTests(unittest.TestCase):
              patch('core.growth_ai._bounded_http', return_value=provider_response(facts)) as transport:
             app.session_state['employee_tab'] = 'Треки и курсы'
             app.button(key='research-E0001').click().run()
+            deadline = time.monotonic() + 5
+            while self.service.development_plan(self.data, 'E0001')['status'] == 'running' and time.monotonic() < deadline:
+                time.sleep(.02)
+            app.session_state['employee_tab'] = 'Треки и курсы'
+            app.run()
         self.assertFalse(app.error)
         self.assertFalse(app.exception)
         self.assertEqual(transport.call_count, 1)
         app.session_state['employee_tab'] = 'Треки и курсы'
-        self.button(app, 'Хочу на этот курс').click().run()
+        app.run()
+        self.button(app, 'Хочу этот курс').click().run()
         self.assertFalse(app.error)
         request = self.service.store.rows('training_requests')[0]
         self.tab(app, 'Заявки и решения', hr=True)
@@ -96,7 +103,7 @@ class GrowthUIFlowTests(unittest.TestCase):
         app.session_state['hr_tab'] = 'Заявки и решения'
         self.button(app, 'Отправить решение сотруднику').click().run()
         self.assertFalse(app.error)
-        self.tab(app, 'Треки и курсы')
+        self.tab(app, 'Мой маршрут')
         self.assertTrue(any('Нет бюджета' in m.value for m in app.markdown))
         self.assertEqual(self.service.store.rows('training_requests')[0]['status'], 'rejected')
 
@@ -107,8 +114,13 @@ class GrowthUIFlowTests(unittest.TestCase):
              patch('core.growth_ai._bounded_http', side_effect=TimeoutError) as transport:
             app.session_state['employee_tab'] = 'Треки и курсы'
             app.button(key='research-E0001').click().run()
+            deadline = time.monotonic() + 5
+            while self.service.development_plan(self.data, 'E0001')['status'] == 'running' and time.monotonic() < deadline:
+                time.sleep(.02)
+            app.session_state['employee_tab'] = 'Треки и курсы'
+            app.run()
         self.assertFalse(app.exception)
-        self.assertTrue(any('AI не ответил' in m.value for m in app.info))
+        self.assertTrue(any('Время ожидания AI истекло' in m.value for m in app.info))
         self.assertEqual(transport.call_count, 1)
         self.tab(app, 'Мой маршрут')
         self.assertTrue(app.session_state['views'][(0, 'E0001')]['recommendations'][0]['reasons'])

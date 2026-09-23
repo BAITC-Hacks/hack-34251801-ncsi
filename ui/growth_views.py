@@ -7,16 +7,19 @@ import streamlit as st
 
 from .components import e, html
 
-STATUS = {'pending': 'На рассмотрении', 'approved': 'Одобрено', 'rejected': 'Отклонено'}
+STATUS = {'suggested': 'Предложение', 'pending': 'На рассмотрении', 'approved': 'Одобрено',
+          'rejected': 'Отклонено', 'cancelled': 'Отменено', 'in_progress': 'В процессе',
+          'completion_pending': 'Сертификат на проверке', 'completed': 'Обучение подтверждено'}
 
 
 def action(call, success):
+    """Widget callback: finish mutations before drawing the next page."""
     try:
         call()
         st.session_state.flash = success
-        st.rerun()
+        st.session_state.views = {}
     except (ValueError, PermissionError) as exc:
-        st.error(str(exc))
+        st.session_state.flash_error = str(exc)
 
 
 def radar(traits, labels):
@@ -79,22 +82,39 @@ def render_profile(adapter, dataset, employee_id):
             st.write(f"**{skill['label']}** · {skill['current']} / {skill['required']}")
 
 
+def certificate_form(adapter, dataset, employee_id, request=None):
+    prefix = f"certificate-{employee_id}" if request is None else f"completion-{request['id']}"
+    def submit():
+        def save():
+            values = st.session_state
+            if request is None:
+                adapter.growth.submit_certificate(dataset, employee_id, values[prefix+'-title'],
+                    values[prefix+'-provider'], values[prefix+'-url'], values[prefix+'-date'],
+                    values[prefix+'-evidence'], values[prefix+'-skills'], values[prefix+'-tags'])
+            else:
+                adapter.growth.submit_training_completion(dataset, employee_id, request['id'],
+                    values[prefix+'-date'], values[prefix+'-evidence'], values[prefix+'-skills'], values[prefix+'-tags'])
+                st.session_state.pop(f'completion-open-{employee_id}', None)
+        action(save, 'Сертификат отправлен HR. До одобрения опыт и навыки не начисляются.')
+    with st.form(prefix, clear_on_submit=False):
+        if request is None:
+            left, right = st.columns(2)
+            left.text_input('Название пройденного курса', max_chars=160, key=prefix+'-title')
+            right.text_input('Учебный провайдер', max_chars=100, key=prefix+'-provider')
+            st.text_input('Ссылка на курс', placeholder='https://...', max_chars=1500, key=prefix+'-url')
+        else:
+            st.write('Подтвердите завершение: **' + request['title'] + '**')
+        st.date_input('Дата завершения курса', value=date.today(), max_value=date.today(), key=prefix+'-date')
+        st.text_input('Ссылка или номер сертификата', max_chars=500, key=prefix+'-evidence')
+        st.multiselect('Какие навыки развивали', list(adapter.catalog), format_func=adapter.skill_name, key=prefix+'-skills')
+        st.text_input('Другие навыки и темы', placeholder='Например: SOC, SIEM', max_chars=300, key=prefix+'-tags')
+        st.form_submit_button('Отправить сертификат HR', type='primary', on_click=submit)
+
+
 def render_certificates(adapter, dataset, employee_id):
     st.subheader('Курсы и сертификаты')
     st.caption('Укажите пройденный курс и подтверждение. Опыт и навыки изменятся после решения HR.')
-    with st.form(f'certificate-{employee_id}', clear_on_submit=False):
-        left, right = st.columns(2)
-        title = left.text_input('Название пройденного курса', max_chars=160)
-        provider = right.text_input('Учебный провайдер', max_chars=100)
-        url = st.text_input('Ссылка на курс', placeholder='https://...', max_chars=1500)
-        completed = st.date_input('Дата завершения курса', value=date.today(), max_value=date.today())
-        evidence = st.text_input('Ссылка или номер сертификата', max_chars=500)
-        selected = st.multiselect('Какие навыки развивали', list(adapter.catalog), format_func=adapter.skill_name)
-        tags = st.text_input('Другие навыки и темы', placeholder='Например: SOC, SIEM, расследование инцидентов', max_chars=300)
-        submitted = st.form_submit_button('Отправить сертификат HR', type='primary')
-    if submitted:
-        action(lambda: adapter.growth.submit_certificate(dataset, employee_id, title, provider, url, completed, evidence, selected, tags),
-               'Сертификат отправлен HR. До одобрения опыт и навыки не начисляются.')
+    certificate_form(adapter, dataset, employee_id)
     certificates = adapter.growth.snapshot(dataset, employee_id)['certificates']
     if not certificates:
         st.info('Пока нет отправленных сертификатов.')
@@ -111,73 +131,227 @@ def render_certificates(adapter, dataset, employee_id):
             st.link_button('Страница курса', item['url'])
 
 
+def change_tab(tab):
+    st.session_state.employee_tab = tab
+
+
+def open_completion(employee_id, request_id):
+    st.session_state[f'completion-open-{employee_id}'] = request_id
+
+
+@st.fragment(run_every=2)
+def research_progress(adapter, dataset, employee_id):
+    result = adapter.growth.development_plan(dataset, employee_id)
+    if result['status'] == 'running':
+        st.info('Подбор выполняется в фоне. Можно переключать разделы и роли.')
+    else:
+        # Only a finished background job refreshes the page, never a card mutation.
+        st.rerun(scope='app')
+
+
+def plan_header(adapter, dataset, employee_id, plan):
+    def start():
+        action(lambda: adapter.growth.start_research(dataset, employee_id, trigger='manual'),
+               'Запуск подбора проверен. Состояние запроса показано ниже.')
+    st.button('Обновить подбор' if plan.get('plan_id') else 'Подобрать треки и найти курсы',
+              key=f'research-{employee_id}', on_click=start, disabled=plan['status'] == 'running' or bool(plan.get('retry_after_seconds')), type='primary')
+    budget = plan['budget']
+    st.caption(f"Бюджет поиска: {budget['used']:.3f} USD из {budget['limit']:.2f} USD учтено / зарезервировано. До {budget['per_request']:.2f} USD на подбор.")
+    st.caption('GPT-5 · автоподбор на карте не чаще раза в неделю. Обновление вручную — отдельный платный запрос.')
+    if plan.get('retry_after_seconds'):
+        st.caption(f"Повторный ручной подбор доступен через {plan['retry_after_seconds']} сек. Обновите страницу после этой паузы.")
+    if plan.get('is_stale'):
+        st.warning('План устарел. Подтверждённый опыт изменился или прошла неделя. Выбранные курсы сохранены; можно обновить подбор вручную.')
+    if plan.get('message'):
+        st.info(plan['message'])
+    if plan.get('error_code'):
+        st.caption('Код: ' + plan['error_code'] + (' · Запрос: ' + str(plan['request_id']) if plan.get('request_id') else ''))
+    if plan['status'] == 'running':
+        research_progress(adapter, dataset, employee_id)
+    if plan.get('sources_insufficient'):
+        st.caption('Источников поиска недостаточно для нескольких вариантов в каждом направлении. Показаны только подтверждённые ссылки.')
+    if plan.get('summary'):
+        st.write(plan['summary'])
+    elif plan['status'] != 'running':
+        st.caption('Объяснение по правилам core:')
+        for rec in plan['snapshot']['view'].get('recommendations', [])[:1]:
+            st.write(rec.get('explanation') or (rec.get('reasons') or [''])[0])
+            if rec.get('reasons'):
+                with st.expander('Факторы исходного движка'):
+                    for reason in rec['reasons']:
+                        st.write(reason)
+            if rec.get('skill_changes'):
+                st.caption('Прогноз core для активности «' + rec['title'] + '»; не начисление за внешние курсы:')
+                for change in rec['skill_changes']:
+                    st.write(f"{change['label']}: {change['before']} → {change['after']}")
+
+
+def references(plan):
+    facts = plan['facts']
+    refs = {s['ref']: f"{s['name']}: {s['level']}/5" for s in facts['skills']}
+    refs.update({c['ref']: f"Сертификат: {c['title']}" for c in facts['certificates']})
+    refs['role'] = f"{facts['role']} · {facts['grade']}"
+    return refs
+
+
+def track_details(track, plan):
+    st.subheader(track['title'])
+    st.write(track['explanation'])
+    refs = references(plan)
+    st.caption('Подтверждённые основания: ' + ' · '.join(refs.get(r, r) for r in track['basis_refs']))
+    st.write('Предлагаемые навыки: ' + ', '.join(track['next_skills']))
+    st.caption('Будущие навыки — предложение. Прирост уровня определяет HR после обучения.')
+
+
+def alternatives(track_id):
+    st.session_state['growth-track-filter'] = track_id
+    change_tab('Треки и курсы')
+
+
+def course_card(adapter, dataset, employee_id, plan, course, track_id, prefix='course'):
+    with st.container(border=True):
+        st.write(f"**{course['title']}** · {course['provider']}")
+        st.write(course.get('why') or course.get('reason', ''))
+        st.caption(f"{course.get('level', '')} · {course.get('price_text', 'Стоимость уточнить у провайдера')}")
+        st.link_button('Открыть курс · источник', course['url'])
+        cid = course['id']
+        prefix = prefix + '-' + track_id
+        if course.get('request_id'):
+            st.info('В маршруте: ' + STATUS.get(course['status'], course['status']))
+            st.button('Открыть заявку', key=f'{prefix}-route-{cid}', on_click=change_tab, args=('Мой маршрут',))
+        else:
+            st.button('Хочу этот курс', key=f'{prefix}-want-{cid}', type='primary', on_click=action,
+                      args=(lambda: adapter.growth.choose_course(dataset, employee_id, plan['plan_id'], cid),
+                            'Курс добавлен в маршрут. Заявка отправлена HR.'))
+        a, b = st.columns(2)
+        hidden = course.get('hidden', False)
+        a.button('Восстановить' if hidden else 'Не подходит', key=f'{prefix}-hide-{cid}', on_click=action,
+                 args=(lambda: adapter.growth.hide_course(dataset, employee_id, plan['plan_id'], cid, hidden=not hidden),
+                       'Предложение восстановлено.' if hidden else 'Предложение скрыто. XP не изменился.'))
+        b.button('Другие варианты', key=f'{prefix}-other-{cid}', on_click=alternatives, args=(track_id,))
+
+
+def custom_course_form(adapter, dataset, employee_id):
+    prefix = f'custom-{employee_id}'
+    def submit():
+        action(lambda: adapter.growth.add_custom_course(dataset, employee_id,
+            st.session_state[prefix+'-title'], st.session_state[prefix+'-url'], st.session_state[prefix+'-reason']),
+            'Ваш курс добавлен в маршрут и отправлен HR.')
+    with st.expander('Предложить свой курс'):
+        with st.form(prefix):
+            st.text_input('Название своего курса', key=prefix+'-title', max_chars=160)
+            st.text_input('HTTPS-ссылка на курс', key=prefix+'-url', max_chars=1500)
+            st.text_area('Почему хотите этот курс', key=prefix+'-reason', max_chars=500)
+            st.form_submit_button('Предложить курс HR', on_click=submit)
+
+
+def hidden_courses(adapter, dataset, employee_id, plan):
+    hidden = [(t, c) for t in plan['tracks'] for c in t['courses'] if c.get('hidden')]
+    if hidden:
+        with st.expander(f'Скрытые предложения · {len(hidden)}'):
+            for track, course in hidden:
+                course_card(adapter, dataset, employee_id, plan, course, track['id'], prefix='hidden')
+
+
 def render_tracks(adapter, dataset, employee_id):
     st.subheader('В какую сторону расти')
-    st.caption('AI учитывает подтверждённые сертификаты, навыки и цель. Глубокая специализация даёт следующий уровень; смешанный опыт — несколько направлений.')
-    result = adapter.growth.recommend(dataset, employee_id)
-    budget_caption = st.empty()
-    if st.button('Подобрать треки и найти курсы', key=f'research-{employee_id}', type='primary'):
-        with st.spinner('Анализируем подтверждённый опыт и ищем реальные курсы…'):
-            try:
-                result = adapter.growth.recommend(dataset, employee_id, generate=True)
-            except ValueError as exc:
-                st.error(str(exc))
-    budget = result['budget']
-    budget_caption.caption(f"Бюджет поиска: {budget['used']:.3f} USD из {budget['limit']:.2f} USD учтено / зарезервировано. До {budget['per_request']:.2f} USD за запрос. Кеш — 7 дней.")
-    if result.get('message'):
-        st.info(result['message'])
-    if result.get('summary'):
-        st.write(result['summary'])
-        st.caption(f"GPT‑4.1 mini · {'из кеша' if result['status'] == 'cached' else 'новый подбор'} · поиск {result['searched_at'][:10]}")
-    facts = adapter.growth.facts(dataset, employee_id)
-    references = {s['ref']: f"{s['name']}: {s['level']}/5" for s in facts['skills']}
-    references.update({c['ref']: f"Сертификат: {c['title']}" for c in facts['certificates']})
-    references['role'] = f"{facts['role']} · {facts['grade']}"
-    for i, track in enumerate(result['tracks']):
-        with st.container(border=True):
-            st.caption('Углубление специализации' if track['kind'] == 'specialization' else 'Новая ветка развития')
-            st.subheader(track['title'])
-            st.write(track['explanation'])
-            st.caption('Подтверждённые основания: ' + ' · '.join(references[r] for r in track['basis_refs']))
-            st.write('Что развивать: ' + ', '.join(track['next_skills']))
-            if not track['courses']:
-                st.caption('В этом поиске не найдены подтверждённые страницы подходящих курсов.')
-            for j, course in enumerate(track['courses']):
-                st.divider()
-                st.write(f"**{course['title']}** · {course['provider']}")
-                st.write(course['why'])
-                st.caption(f"{course['level']} · {course['price_text']}")
-                link, want = st.columns(2)
-                link.link_button('Открыть курс · источник', course['url'], width='stretch')
-                if want.button('Хочу на этот курс', key=f'want-{result["plan_id"]}-{i}-{j}', width='stretch'):
-                    action(lambda: adapter.growth.request_training(dataset, employee_id, result['plan_id'], i, j),
-                           'Запрос на обучение отправлен HR. Оплата не выполнялась.')
-    st.subheader('Мои запросы на обучение')
-    requests = adapter.growth.snapshot(dataset, employee_id)['requests']
-    if not requests:
-        st.caption('Выберите «Хочу на этот курс» у найденного предложения.')
-    for request in requests:
-        with st.container(border=True):
-            st.write(f"**{request['payload']['title']}** — {STATUS[request['status']]}")
-            st.write(request['reason'] or 'HR ещё не принял решение.')
-            st.link_button('Курс', request['url'])
+    plan = adapter.growth.development_plan(dataset, employee_id)
+    plan_header(adapter, dataset, employee_id, plan)
+    selected = st.session_state.get('growth-track-filter')
+    tracks = plan['tracks']
+    if selected and any(t['id'] == selected for t in tracks):
+        st.caption('Альтернативы выбранного направления')
+        st.button('Показать все направления', on_click=lambda: st.session_state.pop('growth-track-filter', None))
+        tracks = [t for t in tracks if t['id'] == selected]
+    for track in tracks:
+        track_details(track, plan)
+        visible = [c for c in track['courses'] if not c.get('hidden')]
+        if not visible:
+            st.caption('Подтверждённых видимых вариантов нет. Можно восстановить предложение или добавить свой курс.')
+        for course in visible:
+            course_card(adapter, dataset, employee_id, plan, course, track['id'])
+    hidden_courses(adapter, dataset, employee_id, plan)
+    custom_course_form(adapter, dataset, employee_id)
+    st.button('Перейти в мой маршрут', on_click=change_tab, args=('Мой маршрут',))
+
+
+def render_growth_map(adapter, dataset, employee_id):
+    from .map_component import build_map_model, render_interactive_map
+    # The service enforces the persisted weekly attempt gate, including failures.
+    adapter.growth.start_research(dataset, employee_id, trigger='auto')
+    plan = adapter.growth.development_plan(dataset, employee_id)
+    st.subheader('Карта развития')
+    plan_header(adapter, dataset, employee_id, plan)
+    state = dict(plan['snapshot'], skill_labels={sid: adapter.skill_name(sid) for sid in adapter.catalog})
+    node = render_interactive_map(build_map_model(plan, state), key=f'growth-map-{employee_id}')
+    if node:
+        kind = node['kind']
+        if kind == 'course':
+            course_card(adapter, dataset, employee_id, plan, node['payload'], node['track_id'], prefix='map')
+            track = next((t for t in plan['tracks'] if t['id'] == node['track_id']), None)
+            if track:
+                track_details(track, plan)
+        elif kind == 'track':
+            track_details(node['payload'], plan)
+            for course in node['payload']['courses']:
+                if not course.get('hidden'):
+                    course_card(adapter, dataset, employee_id, plan, course, node['track_id'], prefix='map')
+        else:
+            st.subheader(node['label'])
+            st.caption('Предлагаемый навык; ещё не подтверждён.' if kind == 'future_skill' else 'Подтверждённая база сотрудника.')
+    else:
+        st.caption('Выберите узел карты, чтобы увидеть объяснение, источник и варианты действий.')
+    hidden_courses(adapter, dataset, employee_id, plan)
+    custom_course_form(adapter, dataset, employee_id)
+
+
+def render_route(adapter, dataset, employee_id):
+    st.subheader('Мой маршрут')
+    st.caption('Выбирайте несколько курсов. Согласование бюджета, обучение и проверка сертификата — отдельные шаги.')
+    plan = adapter.growth.development_plan(dataset, employee_id)
+    if not plan['requests']:
+        st.info('В маршруте пока нет курсов. Выберите предложение на карте или добавьте свою ссылку.')
+    for request in plan['requests']:
+        rid, status = request['id'], request['status']
+        with st.container(border=True, key=f'route-{rid}'):
+            st.write(f"**{request['title']}** · {STATUS.get(status, status)}")
+            st.caption('Предложение сотрудника' if request.get('source') == 'employee' else 'Из плана развития')
+            if request.get('reason'):
+                st.write('HR: ' + request['reason'])
+            st.link_button('Страница курса', request['url'])
+            if status == 'approved':
+                st.button('Начать обучение', key=f'start-{rid}', on_click=action,
+                          args=(lambda rid=rid: adapter.growth.start_training(dataset, employee_id, rid), 'Обучение начато.'))
+            if status == 'in_progress':
+                st.button('Завершить обучение', key=f'finish-{rid}', type='primary',
+                          on_click=open_completion, args=(employee_id, rid))
+                if st.session_state.get(f'completion-open-{employee_id}') == rid:
+                    certificate_form(adapter, dataset, employee_id, request)
+            if status in {'pending', 'approved', 'in_progress'}:
+                st.button('Отменить заявку', key=f'cancel-{rid}', on_click=action,
+                          args=(lambda rid=rid: adapter.growth.cancel_training(dataset, employee_id, rid), 'Заявка отменена. XP не изменился.'))
+            st.button('Выбрать другой курс', key=f'replace-{rid}', on_click=change_tab, args=('Треки и курсы',))
+    st.button('Выбрать курсы на карте', on_click=change_tab, args=('Карта развития',))
+    custom_course_form(adapter, dataset, employee_id)
 
 
 def render_hr_profile(adapter, dataset, employee_id):
     profile = adapter.growth.profile(dataset, employee_id)
     st.subheader('Характеристики и дата выхода')
     st.caption('Сотрудник выбран в боковой панели. Оценки по шкале 0–5 задаёт HR.')
+    def save():
+        action(lambda: adapter.growth.save_profile(dataset, employee_id, st.session_state[f'hire-{employee_id}'],
+            {key: st.session_state[f'trait-{employee_id}-{key}'] for key in adapter.growth.traits}, actor='hr'),
+            'Характеристики и дата выхода сохранены.')
     left, right = st.columns([1.25, 1])
     with left, st.form(f'hr-profile-{employee_id}'):
-        started = st.date_input('Дата начала работы', value=date.fromisoformat(profile['hire_date']),
-                                min_value=date(1960, 1, 1), max_value=date(date.today().year + 1, 12, 31))
-        values = {key: st.slider(label, 0, 5, profile['traits'].get(key, 3), key=f'trait-{employee_id}-{key}')
-                  for key, label in adapter.growth.traits.items()}
-        saved = st.form_submit_button('Сохранить профиль HR', type='primary')
+        st.date_input('Дата начала работы', value=date.fromisoformat(profile['hire_date']), key=f'hire-{employee_id}',
+                      min_value=date(1960, 1, 1), max_value=date(date.today().year + 1, 12, 31))
+        for key, label in adapter.growth.traits.items():
+            st.slider(label, 0, 5, profile['traits'].get(key, 3), key=f'trait-{employee_id}-{key}')
+        st.form_submit_button('Сохранить профиль HR', type='primary', on_click=save)
     with right:
         radar(profile['traits'], adapter.growth.traits)
-    if saved:
-        action(lambda: adapter.growth.save_profile(dataset, employee_id, started, values, actor='hr'), 'Характеристики и дата выхода сохранены.')
 
 
 def render_hr_requests(adapter, dataset, employees):
@@ -190,43 +364,46 @@ def render_hr_requests(adapter, dataset, employees):
         st.caption('Новых сертификатов нет.')
     for certificate in pending:
         item, cid = certificate['payload'], certificate['id']
+        def review(approve, cid=cid):
+            action(lambda: adapter.growth.review_certificate(dataset, cid, approve,
+                dict.fromkeys(st.session_state[f'awards-{cid}'], 1), st.session_state[f'cert-reason-{cid}'], actor='hr'),
+                'Решение по сертификату сохранено.')
         with st.expander(f"{names[certificate['employee_id']]} · {item['title']}", expanded=True):
             st.write(f"Провайдер: {item['provider']} · завершён {item['completed_on']}")
             st.write('Подтверждение: ' + item['evidence'])
             st.write('Темы: ' + (item['tags'] or 'Не указаны'))
             st.link_button('Проверить страницу курса', item['url'])
             with st.form(f'review-cert-{cid}'):
-                skills = st.multiselect('Подтвердить прирост +1 по навыкам', list(adapter.catalog),
-                                        default=item['skill_ids'], format_func=adapter.skill_name, key=f'awards-{cid}')
-                st.caption('Оставьте список пустым, если курс подтверждён, но прирост уровня не установлен. Максимум уровня — 5.')
-                reason = st.text_input('Комментарий HR', key=f'cert-reason-{cid}', max_chars=500)
+                st.multiselect('Подтвердить прирост +1 по навыкам', list(adapter.catalog),
+                               default=item['skill_ids'], format_func=adapter.skill_name, key=f'awards-{cid}')
+                st.caption('Оставьте список пустым, если прирост уровня не установлен. Максимум — 5.')
+                st.text_input('Комментарий HR', key=f'cert-reason-{cid}', max_chars=500)
                 yes, no = st.columns(2)
-                approve = yes.form_submit_button('Подтвердить сертификат', type='primary')
-                reject = no.form_submit_button('Отклонить сертификат')
-            if approve or reject:
-                action(lambda: adapter.growth.review_certificate(dataset, cid, approve, dict.fromkeys(skills, 1), reason, actor='hr'),
-                       'Решение по сертификату сохранено.')
+                yes.form_submit_button('Подтвердить сертификат', type='primary', on_click=review, args=(True,))
+                no.form_submit_button('Отклонить сертификат', on_click=review, args=(False,))
     pending_requests = [r for r in requests if r['status'] == 'pending' and r['employee_id'] in names]
     st.subheader(f'Запросы бюджета на обучение · {len(pending_requests)}')
     if not pending_requests:
         st.caption('Запросов на обучение пока нет.')
     for request in pending_requests:
         item, rid = request['payload'], request['id']
+        def decide(rid=rid):
+            decision = st.session_state[f'decision-{rid}']
+            comment = st.session_state[f'budget-reason-{rid}']
+            action(lambda: adapter.growth.decide_training(rid, decision == 'Одобрить',
+                decision + (': ' + comment if comment else ''), actor='hr'), 'Решение по обучению отправлено сотруднику.')
         with st.expander(f"{names[request['employee_id']]} · {item['title']}", expanded=True):
-            st.write(item['why'])
-            st.caption(f"{item['provider']} · {item['price_text']}")
+            st.write(item.get('why', ''))
+            st.caption(f"{item['provider']} · {item.get('price_text', 'Стоимость уточняется')}")
             st.link_button('Страница провайдера', item['url'])
             with st.form(f'review-budget-{rid}'):
-                decision = st.selectbox('Решение по бюджету', ['Одобрить', 'Нет бюджета', 'Не соответствует плану развития', 'Нужны уточнения'], key=f'decision-{rid}')
-                comment = st.text_input('Комментарий сотруднику', key=f'budget-reason-{rid}', max_chars=400)
-                save = st.form_submit_button('Отправить решение сотруднику', type='primary')
-            if save:
-                action(lambda: adapter.growth.decide_training(rid, decision == 'Одобрить', decision + (': ' + comment if comment else ''), actor='hr'),
-                       'Решение по обучению отправлено сотруднику.')
+                st.selectbox('Решение по бюджету', ['Одобрить', 'Нет бюджета', 'Не соответствует плану развития', 'Нужны уточнения'], key=f'decision-{rid}')
+                st.text_input('Комментарий сотруднику', key=f'budget-reason-{rid}', max_chars=400)
+                st.form_submit_button('Отправить решение сотруднику', type='primary', on_click=decide)
     reviewed = [r for r in certificates + requests if r['status'] != 'pending' and r['employee_id'] in names]
     with st.expander(f'Последние решения · {len(reviewed)}'):
-        for row in sorted(reviewed, key=lambda r: r['reviewed_at'], reverse=True)[:20]:
-            st.write(f"{names[row['employee_id']]} · {row['payload']['title']} · {STATUS[row['status']]}")
-            st.caption(row['reason'] or 'Подтверждено HR')
+        for row in sorted(reviewed, key=lambda r: r['reviewed_at'] or '', reverse=True)[:20]:
+            st.write(f"{names[row['employee_id']]} · {row['payload']['title']} · {STATUS.get(row['status'], row['status'])}")
+            st.caption(row['reason'] or 'Решение сохранено')
     budget = adapter.growth.budget()
     st.caption(f"AI: {budget['used']:.3f} USD учтено / зарезервировано из {budget['limit']:.2f} USD. Новый запрос — до {budget['per_request']:.2f} USD.")

@@ -162,40 +162,21 @@ class DevelopmentMapTests(unittest.TestCase):
         empty["skills"] = []
         self.assertIsNone(self.model(empty)["selected_skill"])
 
-    def test_streamlit_map_selection_completion_and_profile_switch(self):
+    def test_streamlit_map_mount_and_employee_switch_dont_award_progress(self):
         isolate_demo_storage(self)
         app = AppTest.from_file(str(ROOT / "app.py"), default_timeout=30).run()
         demo_login(app)
-        self.assertFalse(app.exception)
-        self.assertFalse(app.error)
-        app.session_state["employee_tab"] = "Карта развития"
-        app.run()
-        # AppTest does not serialize stateful tabs yet; a real browser sends this
-        # state on each widget rerun. Keep the selected tab explicit in the test.
-        app.session_state["employee_tab"] = "Карта развития"
-        app.selectbox(key="map-event-E0001").select("EV_036").run()
-        app.session_state["employee_tab"] = "Карта развития"
-        app.selectbox(key="map-skill-E0001").select("SK_PUBLIC_SPEAKING").run()
-        self.assertFalse(app.exception)
-        before = app.session_state["views"][(0, "E0001")]
-        app.session_state["employee_tab"] = "Карта развития"
-        app.button(key="map-complete-E0001-EV_036").click().run()
-        self.assertFalse(app.exception)
-        self.assertFalse(app.error)
-        done = app.session_state["map_completions"]["E0001"]
-        self.assertEqual(done["event_id"], "EV_036")
-        self.assertEqual(done["before"]["SK_PUBLIC_SPEAKING"], 0)
-        self.assertEqual(done["after"]["SK_PUBLIC_SPEAKING"], 1)
-        fresh = app.session_state["views"][(1, "E0001")]
-        self.assertGreater(fresh["trajectory"]["progress_pct"], before["trajectory"]["progress_pct"])
-        self.assertEqual(app.selectbox(key="map-event-E0001").value, "EV_036")
-        switch_demo_role(app, "employee", "E0002")
-        app.session_state["employee_tab"] = "Карта развития"
-        app.run()
-        self.assertFalse(app.exception)
-        self.assertFalse(app.error)
-        completions = app.session_state["map_completions"] if "map_completions" in app.session_state else {}
-        self.assertNotIn("E0002", completions)
+        before = deepcopy(app.session_state['dataset'])
+        with patch('core.growth_ai._bounded_http') as transport:
+            for eid in ['E0001', 'E0002', 'E0001']:
+                switch_demo_role(app, 'employee', eid)
+                app.session_state['employee_tab'] = 'Карта развития'
+                app.run()
+                self.assertFalse(app.exception)
+                self.assertFalse(app.error)
+                self.assertFalse(any(b.key and b.key.startswith('map-complete-') for b in app.button))
+            transport.assert_not_called()
+        self.assertEqual(app.session_state['dataset'], before)
 
 
 if __name__ == "__main__":

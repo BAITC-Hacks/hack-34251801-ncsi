@@ -16,7 +16,7 @@ from auth.demo_ui import render_demo_login
 from ui.components import STATUSES, e, empty_state, html, journey, number, page_heading, recommendation_content, skill_card, stat
 from ui.core_adapter import AdapterError, CoreAdapter
 from ui.development_map import render_development_map
-from ui.growth_views import render_profile, render_certificates, render_tracks, render_hr_profile, render_hr_requests
+from ui.growth_views import render_profile, render_certificates, render_tracks, render_hr_profile, render_hr_requests, render_route, render_growth_map, action
 
 ROOT = Path(__file__).resolve().parent
 load_dotenv(ROOT / '.env', override=False, interpolate=False)
@@ -34,9 +34,9 @@ def show_error(exc, action):
 
 def employee_view(adapter, employee_id):
     key = (st.session_state.revision, employee_id)
-    if key not in st.session_state.views:
+    if not adapter.is_demo or key not in st.session_state.views:
         with st.spinner("Готовим ваш маршрут…"):
-            st.session_state.views[key] = adapter.get_employee_view(st.session_state.dataset, employee_id)
+            st.session_state.views[key] = adapter.get_employee_view(st.session_state.dataset, employee_id, approved=not adapter.is_demo)
     return st.session_state.views[key]
 
 
@@ -53,18 +53,16 @@ def finish_activity(adapter, employee_id, rec, current_view):
     completions[employee_id] = {"event_id": rec["event_id"], "before": before,
                                 "after": {s["skill_id"]: s["current"] for s in view["skills"]}}
     st.session_state.flash = f'Активность «{rec["title"]}» завершена. ' + (" · ".join(changes) if changes else "Профиль и рекомендации пересчитаны.")
-    st.rerun()
+
 
 
 def render_recommendation(adapter, view, rec, index):
     with st.container(border=True, key=f"recommendation_{index}"):
         recommendation_content(rec, best=index == 0)
-        if st.button("Завершить активность" if index == 0 else "Завершить эту активность",
-                     key=f'complete-{view["employee"]["employee_id"]}-{rec["event_id"]}', type="primary" if index == 0 else "secondary", width="stretch"):
-            try:
-                finish_activity(adapter, view["employee"]["employee_id"], rec, view)
-            except Exception as exc:
-                show_error(exc, "завершить активность")
+        st.button("Завершить активность" if index == 0 else "Завершить эту активность",
+                  key=f'complete-{view["employee"]["employee_id"]}-{rec["event_id"]}',
+                  type="primary" if index == 0 else "secondary", width="stretch", on_click=action,
+                  args=(lambda: finish_activity(adapter, view["employee"]["employee_id"], rec, view), 'Активность завершена.'))
 
 
 def render_employee(adapter, employee_id):
@@ -89,60 +87,63 @@ def render_employee(adapter, employee_id):
             if portfolio_tab.open:
                 render_certificates(adapter, st.session_state.dataset, employee_id)
     with route:
-        st.caption("Учебная симуляция стартового кита. Для зачёта внешнего обучения и XP отправьте сертификат HR.")
-        recs = view["recommendations"]
-        left, right = st.columns([1.95, 1], gap="large")
-        with left:
-            if recs:
-                render_recommendation(adapter, view, recs[0], 0)
-                if len(recs) > 1:
-                    with st.expander(f"Другие подходящие активности · {len(recs) - 1}"):
-                        for index, rec in enumerate(recs[1:], 1):
-                            render_recommendation(adapter, view, rec, index)
+        if route.open:
+            if not adapter.is_demo:
+                render_route(adapter, st.session_state.dataset, employee_id)
             else:
-                with st.container(border=True):
-                    empty_state("Следующий шаг требует обсуждения", view.get("empty_reason") or "Движок не нашёл подходящей активности. Посмотрите разрывы в навыках и обсудите индивидуальный план с руководителем.")
-        with right:
-            with st.container(border=True, key="focus"):
-                html('<span class="cq-tag">Фокус развития</span>')
-                st.subheader(f'До {view["next_grade"]}' if view.get("next_grade") else "Ваши навыки")
-                gaps = [s for s in view["skills"] if s["gap"] > 0]
-                if gaps:
-                    for skill in gaps[:4]:
-                        skill_card(skill)
-                    if len(gaps) > 4:
-                        st.caption(f'Ещё {len(gaps) - 4} — во вкладке «Навыки и требования».')
-                else:
-                    st.caption("Разрывов до цели по данным движка нет.")
-                html('<div class="cq-rule"></div><p class="cq-help">Уровни по шкале 0–5. Выполнение требований по навыкам помогает обсудить рост, но не означает автоматического повышения.</p>')
+                st.caption("Учебная симуляция стартового кита. Для зачёта внешнего обучения и XP отправьте сертификат HR.")
+                recs = view["recommendations"]
+                left, right = st.columns([1.95, 1], gap="large")
+                with left:
+                    if recs:
+                        render_recommendation(adapter, view, recs[0], 0)
+                        if len(recs) > 1:
+                            with st.expander(f"Другие подходящие активности · {len(recs) - 1}"):
+                                for index, rec in enumerate(recs[1:], 1):
+                                    render_recommendation(adapter, view, rec, index)
+                    else:
+                        with st.container(border=True):
+                            empty_state("Следующий шаг требует обсуждения", view.get("empty_reason") or "Движок не нашёл подходящей активности. Посмотрите разрывы в навыках и обсудите индивидуальный план с руководителем.")
+                with right:
+                    with st.container(border=True, key="focus"):
+                        html('<span class="cq-tag">Фокус развития</span>')
+                        st.subheader(f'До {view["next_grade"]}' if view.get("next_grade") else "Ваши навыки")
+                        gaps = [s for s in view["skills"] if s["gap"] > 0]
+                        if gaps:
+                            for skill in gaps[:4]:
+                                skill_card(skill)
+                            if len(gaps) > 4:
+                                st.caption(f'Ещё {len(gaps) - 4} — во вкладке «Навыки и требования».')
+                        else:
+                            st.caption("Разрывов до цели по данным движка нет.")
+                        html('<div class="cq-rule"></div><p class="cq-help">Уровни по шкале 0–5. Выполнение требований по навыкам помогает обсудить рост, но не означает автоматического повышения.</p>')
     with map_tab:
-        def complete_map_step(rec):
-            try:
-                finish_activity(adapter, employee_id, rec, view)
-            except Exception as exc:
-                show_error(exc, "завершить активность")
         if map_tab.open:
-            render_development_map(adapter, view, complete_map_step)
+            if adapter.is_demo:
+                render_development_map(adapter, view, lambda rec: finish_activity(adapter, employee_id, rec, view))
+            else:
+                render_growth_map(adapter, st.session_state.dataset, employee_id)
     with skills_tab:
-        st.subheader("Навыки на пути к цели")
-        st.caption("Текущий уровень учитывает завершённое обучение. Требования — из профиля следующего грейда.")
-        if view["skills"]:
-            data = [{"Навык": s["name"], "Тип": "Профессиональный" if s["type"] == "hard" else "Надпрофессиональный",
-                     "Текущий уровень": s["current"], "Требуется": s["required"], "Разрыв": s["gap"],
-                     "Ключевой": "Да" if s["critical"] else "Нет"} for s in view["skills"]]
-            st.dataframe(data, hide_index=True, width="stretch")
-        else:
-            empty_state("Требования следующего грейда не заданы", "Движок не вернул список требований для этой цели.")
+        if skills_tab.open:
+            st.subheader("Навыки на пути к цели")
+            st.caption("Текущий уровень учитывает завершённое обучение. Требования — из профиля следующего грейда.")
+            if view["skills"]:
+                data = [{"Навык": s["name"], "Тип": "Профессиональный" if s["type"] == "hard" else "Надпрофессиональный",
+                         "Текущий уровень": s["current"], "Требуется": s["required"], "Разрыв": s["gap"],
+                         "Ключевой": "Да" if s["critical"] else "Нет"} for s in view["skills"]]
+                st.dataframe(data, hide_index=True, width="stretch")
+            else:
+                empty_state("Требования следующего грейда не заданы", "Движок не вернул список требований для этой цели.")
     with history_tab:
-        st.subheader("История участия")
-        history = sorted(view["history"], key=lambda r: r.get("date", ""), reverse=True)
-        if history:
-            st.dataframe([{"Дата": h.get("date", ""), "Активность": h.get("title", ""),
-                           "Статус": STATUSES.get(h.get("status"), h.get("status", "")),
-                           "Прогресс, %": int(h.get("completion_pct") or 0)} for h in history], hide_index=True, width="stretch")
-        else:
-            empty_state("Пока нет истории", "Первое завершённое обучение появится здесь и будет учтено при следующем подборе.")
-
+        if history_tab.open:
+            st.subheader("История участия")
+            history = sorted(view["history"], key=lambda r: r.get("date", ""), reverse=True)
+            if history:
+                st.dataframe([{"Дата": h.get("date", ""), "Активность": h.get("title", ""),
+                               "Статус": STATUSES.get(h.get("status"), h.get("status", "")),
+                               "Прогресс, %": int(h.get("completion_pct") or 0)} for h in history], hide_index=True, width="stretch")
+            else:
+                empty_state("Пока нет истории", "Первое завершённое обучение появится здесь и будет учтено при следующем подборе.")
 
 def render_hr(adapter, employees):
     page_heading("Развитие команды", "Где нужна поддержка, какие навыки развивать и как сотрудники участвуют в обучении.", "HR · Обзор развития")
@@ -157,12 +158,13 @@ def render_hr(adapter, employees):
         if profile_tab.open and st.session_state.get("employee_id"):
             render_hr_profile(adapter, st.session_state.dataset, st.session_state.employee_id)
     with overview:
-        render_hr_overview(adapter, employees)
+        if overview.open:
+            render_hr_overview(adapter, employees)
 
 
 def render_hr_overview(adapter, employees):
     key = (st.session_state.revision, "__hr__")
-    if key not in st.session_state.views:
+    if not adapter.is_demo or key not in st.session_state.views:
         with st.spinner("Собираем обзор команды…"):
             st.session_state.views[key] = adapter.get_hr_view(st.session_state.dataset)
     view = st.session_state.views[key]
@@ -208,6 +210,23 @@ def render_hr_overview(adapter, employees):
         empty_state("Участие ещё не зафиксировано", "Загрузите историю или завершите активность на экране сотрудника.")
 
 
+def import_data(adapter):
+    def save():
+        profiles = st.session_state.get('employees_upload')
+        history = st.session_state.get('history_upload')
+        before_ids = {e['employee_id'] for e in adapter.list_employees(st.session_state.dataset)}
+        updated = adapter.import_test_data(st.session_state.dataset,
+            profiles.getvalue() if profiles else None, history.getvalue() if history else None)
+        new_ids = [e['employee_id'] for e in adapter.list_employees(updated) if e['employee_id'] not in before_ids]
+        st.session_state.dataset = updated
+        st.session_state.revision += 1
+        st.session_state.views = {}
+        st.session_state.map_completions = {}
+        if new_ids:
+            st.session_state.pending_employee = new_ids[0]
+    action(save, 'Импорт завершён. История учтена движком. Выйдите и войдите как сотрудник, выбрав новый профиль.')
+
+
 def render_import(adapter, employees):
     page_heading("Добавьте данные для проверки", "Новые профили и история попадут в тот же движок и тот же список сотрудников.", "Данные жюри")
     left, right = st.columns([1.5, 1], gap="large")
@@ -217,26 +236,7 @@ def render_import(adapter, employees):
         with st.form("jury_import", clear_on_submit=False):
             profiles = st.file_uploader("Профили сотрудников · JSON", type=["json"], key="employees_upload")
             history = st.file_uploader("История участия · CSV", type=["csv"], key="history_upload")
-            submitted = st.form_submit_button("Импортировать данные", type="primary", width="stretch")
-        if submitted:
-            try:
-                before_ids = {emp["employee_id"] for emp in employees}
-                with st.spinner("Проверяем и импортируем данные…"):
-                    updated = adapter.import_test_data(st.session_state.dataset,
-                                                      profiles.getvalue() if profiles else None,
-                                                      history.getvalue() if history else None)
-                    imported_employees = adapter.list_employees(updated)
-                new_ids = [emp["employee_id"] for emp in imported_employees if emp["employee_id"] not in before_ids]
-                st.session_state.dataset = updated
-                st.session_state.revision += 1
-                st.session_state.views = {}
-                st.session_state.map_completions = {}
-                if new_ids:
-                    st.session_state.pending_employee = new_ids[0]
-                st.session_state.flash = f"Импорт завершён. Новых сотрудников: {len(new_ids)}. История учтена движком. Выйдите и войдите как сотрудник, выбрав новый профиль."
-                st.rerun()
-            except Exception as exc:
-                show_error(exc, "импортировать данные")
+            st.form_submit_button("Импортировать данные", type="primary", width="stretch", on_click=import_data, args=(adapter,))
     with right, st.container(border=True, key="import_format"):
         st.subheader("Формат файлов")
         st.markdown("**Профили:** исходный `employees.json` с массивом `employees` или массив объектов. У каждого профиля должен быть уникальный `employee_id`.")
@@ -267,7 +267,7 @@ def render_admin_status(adapter, employees):
     st.dataframe([
         {"Компонент": "Вход", "Состояние": "Демонстрация ролей · без паролей и базы аккаунтов"},
         {"Компонент": "Движок", "Состояние": "Предпросмотр" if adapter.is_demo else "core/api.py · подключён"},
-        {"Компонент": "AI-поиск курсов", "Состояние": "Ключ настроен; запуск по кнопке" if os.environ.get("OPENAI_API_KEY") else "Ключ не задан; доступен маршрут по правилам"},
+        {"Компонент": "AI-поиск курсов", "Состояние": "Ключ настроен; недельный подбор на карте и по кнопке" if os.environ.get("OPENAI_API_KEY") else "Ключ не задан; доступен маршрут по правилам"},
         {"Компонент": "Профили и история", "Состояние": "Стартовый кит и изменения текущей сессии"},
         {"Компонент": "Сертификаты и решения HR", "Состояние": "Локальное хранилище модуля развития"},
     ], hide_index=True, width="stretch")
@@ -315,9 +315,7 @@ def main():
         html('<div class="cq-brand"><div class="cq-mark">cq</div><div><strong>Career Quest</strong><small>HALYK · РАЗВИТИЕ</small></div></div><div class="cq-rule"></div>')
         st.subheader(role_label)
         st.caption("Деморежим · без паролей. Выбор роли не является разграничением доступа.")
-        if st.button("Выйти / сменить роль", key="cq_demo_logout", width="stretch"):
-            end_demo_session()
-            st.rerun()
+        st.button("Выйти / сменить роль", key="cq_demo_logout", width="stretch", on_click=end_demo_session)
         html('<div class="cq-rule"></div>')
         ids = list(choices)
         if role == "hr":
@@ -339,22 +337,26 @@ def main():
             st.warning("Предпросмотр UI: core/ ещё не подключён. Карточка E0001 — пример, AI не используется.")
         else:
             st.caption("● Подключён рекомендательный движок")
-    if "flash" in st.session_state:
-        st.success(st.session_state.pop("flash"))
-    try:
-        if role == "admin":
-            if admin_page == "Состояние приложения":
-                render_admin_status(adapter, employees)
+    with st.container(key="notifications"):
+        if "flash" in st.session_state:
+            st.success(st.session_state.pop("flash"))
+        if "flash_error" in st.session_state:
+            st.error(st.session_state.pop("flash_error"))
+    with st.container(key="current-page"):
+        try:
+            if role == "admin":
+                if admin_page == "Состояние приложения":
+                    render_admin_status(adapter, employees)
+                else:
+                    render_import(adapter, employees)
+            elif role == "hr":
+                render_hr(adapter, employees)
+            elif role == "employee" and employee_id:
+                render_employee(adapter, employee_id)
             else:
-                render_import(adapter, employees)
-        elif role == "hr":
-            render_hr(adapter, employees)
-        elif role == "employee" and employee_id:
-            render_employee(adapter, employee_id)
-        else:
-            page_heading("Начните с профиля", "Выйдите и войдите как администратор, чтобы добавить сотрудников.")
-    except Exception as exc:
-        show_error(exc, "построить представление")
+                page_heading("Начните с профиля", "Выйдите и войдите как администратор, чтобы добавить сотрудников.")
+        except Exception as exc:
+            show_error(exc, "построить представление")
     html('<div class="cq-footer"><span>Career Quest · HackAlem AI · 2026</span><span>Развитие — совместное решение сотрудника и руководителя</span></div>')
 
 

@@ -1,0 +1,18 @@
+<section class="cq-interactive-map" aria-label="Интерактивная карта развития">
+  <div class="cq-map-toolbar" role="toolbar" aria-label="Управление картой">
+    <button type="button" data-action="zoom-in" aria-label="Увеличить карту">＋</button>
+    <button type="button" data-action="zoom-out" aria-label="Уменьшить карту">−</button>
+    <button type="button" data-action="fit">Вся карта</button>
+    <button type="button" data-action="reset">Сбросить вид</button>
+    <button type="button" data-action="collapse" disabled>Свернуть ветвь</button>
+    <output class="cq-map-zoom" aria-label="Масштаб карты">100%</output>
+  </div>
+  <svg class="cq-map-canvas" role="group" aria-label="Узлы карты развития" tabindex="0">
+    <g class="cq-map-world"></g>
+  </svg>
+  <div class="cq-map-bottom">
+    <label>Выбрать узел <select class="cq-map-select" aria-label="Выбрать узел карты"></select></label>
+    <span class="cq-map-help">Перетащите фон · колесо: масштаб · стрелки: узлы · Enter: выбрать · +/−: масштаб</span>
+  </div>
+  <span class="cq-map-announcement" role="status" aria-live="polite"></span>
+</section>

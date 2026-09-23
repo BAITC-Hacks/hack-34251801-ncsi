@@ -101,6 +101,7 @@ class GrowthStore:
                     hidden INTEGER NOT NULL DEFAULT 0, updated_at TEXT NOT NULL,
                     PRIMARY KEY(employee_id, course_id));
             """)
+            db.execute('BEGIN IMMEDIATE')
             columns = {row['name'] for row in db.execute('PRAGMA table_info(training_requests)')}
             if 'certificate_id' not in columns:
                 db.execute('ALTER TABLE training_requests ADD COLUMN certificate_id TEXT')
@@ -262,6 +263,21 @@ class GrowthService:
         return {'role': person['role'], 'grade': person['grade'], 'goal': person.get('career_goal'),
                 'skills': skills, 'certificates': certificates,
                 'traits': {TRAITS[k]: v for k, v in snapshot['profile']['traits'].items()}}
+
+    def approved_dataset(self, dataset):
+        """Project confirmed portfolio changes into the original HR engine."""
+        candidate = deepcopy(dataset)
+        with self.store.connection() as db:
+            changed = {r[0] for r in db.execute('SELECT employee_id FROM profiles')}
+            changed.update(r[0] for r in db.execute("SELECT DISTINCT employee_id FROM certificates WHERE status='approved'"))
+        changed.update(dataset.get('_growth_baselines', {}))
+        for person in candidate['employees']:
+            if person['employee_id'] in changed:
+                state = self.snapshot(dataset, person['employee_id'])
+                person['skills'] = state['skills']
+                person['hire_date'] = state['profile']['hire_date']
+                person['last_review_date'] = candidate['as_of_date']
+        return candidate
 
     def recommend(self, dataset, employee_id, generate=False):
         from .growth_ai import GrowthAdvisor

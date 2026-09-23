@@ -119,14 +119,15 @@ class CoreAdapter:
         return [dict(row, full_name=row.get("full_name", row.get("name", row["employee_id"])))
                 for row in self.api.list_employees(dataset)]
 
-    def get_employee_view(self, dataset, employee_id):
+    def get_employee_view(self, dataset, employee_id, approved=False):
         managed = getattr(self, "managed_ai", False) and self.api.__name__ == "core.api"
-        view = deepcopy(self.growth.baseline_view(dataset, employee_id) if managed else self.api.get_employee_view(dataset, employee_id))
+        view = deepcopy(self.growth.snapshot(dataset, employee_id)["view"] if managed and approved else
+                        self.growth.baseline_view(dataset, employee_id) if managed else self.api.get_employee_view(dataset, employee_id))
         employee = view["employee"]
         employee["full_name"] = employee.get("full_name", employee.get("name", employee_id))
         view["ai_status"] = "Предпросмотр UI" if self.is_demo else "Детерминированный расчёт"
         if managed:
-            view["ai_status"] = "Расчёт core · AI-треки и поиск запускаются отдельно по кнопке"
+            view["ai_status"] = "Подтверждённый прогресс core · AI-план обновляется отдельно"
         elif not self.is_demo and self.api.__name__ == "core.api":
             try:
                 view["ai_status"] = importlib.import_module("core.ai").LAST_STATUS.get()
@@ -240,7 +241,8 @@ class CoreAdapter:
         return updated
 
     def get_hr_view(self, dataset):
-        result = deepcopy(self.api.get_hr_view(dataset))
+        source = self.growth.approved_dataset(dataset) if getattr(self, 'managed_ai', False) and not self.is_demo else dataset
+        result = deepcopy(self.api.get_hr_view(source))
         for row in result.get("skill_gaps", []):
             row.setdefault("name", row.get("label") or self.skill_name(row.get("skill_id", "")))
         blocked = result.get("employees_without_next_step", result.get("employees_without_recommendations", []))

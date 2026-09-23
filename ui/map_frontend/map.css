@@ -1,0 +1,30 @@
+:host { color-scheme: light; }
+.cq-interactive-map { color: #163d36; background: #f8fcfa; border: 1px solid #d5e5df; border-radius: 16px; overflow: hidden; font: 14px/1.4 system-ui, sans-serif; }
+.cq-map-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 10px; background: #fff; border-bottom: 1px solid #d5e5df; }
+.cq-map-toolbar button, .cq-map-select { color: #163d36; background: #fff; border: 1px solid #a8c3b9; border-radius: 7px; padding: 6px 10px; font: inherit; cursor: pointer; }
+.cq-map-toolbar button:hover { background: #eaf5ef; }
+.cq-map-toolbar button:disabled { color: #7b8b85; border-color: #dce5e1; cursor: default; }
+.cq-map-toolbar button:focus-visible, .cq-map-select:focus-visible, .cq-map-canvas:focus-visible { outline: 3px solid #c18412; outline-offset: -3px; }
+.cq-map-zoom { margin-left: auto; padding-right: 4px; font-variant-numeric: tabular-nums; }
+.cq-map-canvas { display: block; width: 100%; height: 420px; touch-action: none; user-select: none; cursor: grab; }
+.cq-map-canvas.dragging { cursor: grabbing; }
+.cq-map-world { transform-origin: 0 0; }
+.cq-map-column { fill: #57736a; font-weight: 700; font-size: 12px; letter-spacing: .7px; }
+.cq-map-edge { fill: none; stroke: #9bbcad; stroke-width: 1.8; pointer-events: none; }
+.cq-map-edge.suggestion { stroke: #a8accc; stroke-dasharray: 5 4; }
+.cq-map-node { cursor: pointer; outline: none; }
+.cq-map-node rect { fill: #fff; stroke: #a9cabb; stroke-width: 1.5; }
+.cq-map-node.track rect { fill: #e7f3ed; stroke: #247b60; }
+.cq-map-node.future_skill rect { fill: #f7f6fd; stroke: #b9b3d6; stroke-dasharray: 4 3; }
+.cq-map-node.course rect { fill: #fffaf0; stroke: #cfb66e; }
+.cq-map-node.selected rect { stroke: #007f61; stroke-width: 3.5; }
+.cq-map-node:focus rect { stroke: #bb7915; stroke-width: 3.5; }
+.cq-map-label { fill: #193b32; font-size: 14px; font-weight: 600; pointer-events: none; }
+.cq-map-subtitle { fill: #4b6b60; font-size: 11px; pointer-events: none; }
+.cq-map-collapse-mark { fill: #21634f; font-size: 16px; font-weight: bold; pointer-events: none; }
+.cq-map-bottom { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; padding: 10px; background: #fff; border-top: 1px solid #d5e5df; }
+.cq-map-bottom label { display: flex; align-items: center; gap: 8px; max-width: 100%; }
+.cq-map-select { max-width: min(400px, 58vw); }
+.cq-map-help { color: #5e726a; font-size: 11px; }
+.cq-map-announcement { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+@media (max-width: 600px) { .cq-map-canvas { height: 340px; } .cq-map-toolbar button { padding: 6px 8px; font-size: 12px; } }

@@ -78,6 +78,17 @@ class GrowthWorkflowTests(unittest.TestCase):
         self.assertEqual(course['reason'], 'Практика анализа')
         self.assertEqual(self.data, self.original)
 
+    def test_hr_projection_matches_confirmed_employee_skills_without_mutating_kit(self):
+        rid = self.ready_to_complete()
+        cid = self.complete(rid)
+        self.service.review_certificate(self.data, cid, True, {'SK_API_DESIGN': 1}, actor='hr')
+        candidate = self.service.approved_dataset(self.data)
+        state = self.service.snapshot(self.data, self.eid)
+        person = next(p for p in candidate['employees'] if p['employee_id'] == self.eid)
+        self.assertEqual(person['skills'], state['skills'])
+        self.assertEqual(api.get_employee_view(candidate, self.eid)['skills'], state['view']['skills'])
+        self.assertEqual(self.data, self.original)
+
     def test_hide_restore_persists_across_refresh_without_xp_or_cancelling(self):
         before = self.service.snapshot(self.data, self.eid)['xp']
         rid = self.choose()
