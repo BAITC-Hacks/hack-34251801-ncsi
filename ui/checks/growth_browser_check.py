@@ -20,6 +20,7 @@ from playwright.sync_api import expect, sync_playwright
 
 from core import api
 from core.growth import GrowthService, GrowthStore
+from .browser_login_helpers import login_demo, switch_demo_role
 from .test_growth import provider_response
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -62,8 +63,7 @@ def main():
                 page = browser.new_page(viewport={'width': 1440, 'height': 1000})
                 page.set_default_timeout(15000)
                 page.goto(url, wait_until='networkidle')
-                page.locator('.cq-footer').wait_for()
-                page.get_by_text('HR', exact=True).click()
+                login_demo(page, 'hr')
                 page.get_by_role('tab', name='Оценка сотрудника', exact=True).click()
                 start = date.today() - timedelta(days=20)
                 for segment, value in [('year', start.year), ('month', start.month), ('day', start.day)]:
@@ -78,7 +78,7 @@ def main():
                 expect(page.get_by_text('Характеристики и дата выхода сохранены.', exact=True)).to_be_visible()
                 assert service.snapshot(data, 'E0001')['xp'] == 200
                 assert service.profile(data, 'E0001')['traits']['resilience'] == 5
-                page.get_by_text('Сотрудник', exact=True).click()
+                switch_demo_role(page, 'employee', 'E0001')
                 expect(page.locator('.cq-xp-value')).to_contain_text('200')
                 radar = page.locator('[data-testid="stImage"] img').first
                 expect(radar).to_be_visible()
@@ -96,7 +96,7 @@ def main():
                 page.get_by_role('button', name='Отправить сертификат HR', exact=True).click()
                 expect(page.get_by_text('Сертификат отправлен HR. До одобрения опыт и навыки не начисляются.', exact=True)).to_be_visible()
                 assert service.snapshot(data, 'E0001')['xp'] == 200
-                page.get_by_text('HR', exact=True).click()
+                switch_demo_role(page, 'hr')
                 page.get_by_role('tab', name='Заявки и решения', exact=True).click()
                 page.get_by_role('button', name='Подтвердить сертификат', exact=True).click()
                 expect(page.get_by_text('Решение по сертификату сохранено.', exact=True)).to_be_visible()
@@ -108,25 +108,27 @@ def main():
                      'CAREER_QUEST_GROWTH_BUDGET_USD': '5', 'CAREER_QUEST_GROWTH_REQUEST_USD': '.1'}), \
                      patch('core.growth_ai._bounded_http', return_value=provider_response(service.facts(data, 'E0001'))):
                     assert service.recommend(data, 'E0001', True)['status'] == 'generated'
-                page.get_by_text('Сотрудник', exact=True).click()
+                switch_demo_role(page, 'employee', 'E0001')
                 page.get_by_role('tab', name='Треки и курсы', exact=True).click()
                 expect(page.get_by_role('heading', name='SOC: следующий уровень', exact=True)).to_be_visible()
                 page.screenshot(path=str(output / 'tracks-mocked-search.png'), full_page=True)
                 page.get_by_role('button', name='Хочу на этот курс', exact=True).click()
                 expect(page.get_by_text('Запрос на обучение отправлен HR. Оплата не выполнялась.', exact=True)).to_be_visible()
-                page.get_by_text('HR', exact=True).click()
+                switch_demo_role(page, 'hr')
+                page.get_by_role('tab', name='Заявки и решения', exact=True).click()
                 page.get_by_label('Решение по бюджету', exact=True).click()
                 page.get_by_role('option', name='Нет бюджета', exact=True).click()
                 page.get_by_label('Комментарий сотруднику', exact=True).fill('Вернёмся в следующем квартале')
                 page.get_by_role('button', name='Отправить решение сотруднику', exact=True).click()
                 expect(page.get_by_text('Решение по обучению отправлено сотруднику.', exact=True)).to_be_visible()
-                page.get_by_text('Сотрудник', exact=True).click()
+                switch_demo_role(page, 'employee', 'E0001')
                 page.get_by_role('tab', name='Треки и курсы', exact=True).click()
                 expect(page.get_by_text('Нет бюджета: Вернёмся в следующем квартале', exact=True)).to_be_visible()
                 page.screenshot(path=str(output / 'employee-decision.png'), full_page=True)
                 assert service.store.rows('training_requests')[0]['status'] == 'rejected'
                 assert service.snapshot(data, 'E0001')['xp'] == 300
                 page.reload(wait_until='networkidle')
+                login_demo(page, 'employee', 'E0001')
                 expect(page.locator('.cq-xp-value')).to_contain_text('300')
                 expect(page.locator('[data-testid="stException"]')).to_have_count(0)
                 browser.close()

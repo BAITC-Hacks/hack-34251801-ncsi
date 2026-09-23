@@ -10,6 +10,7 @@ from unittest.mock import patch
 from streamlit.testing.v1 import AppTest
 from ui.core_adapter import CoreAdapter
 from ui.development_map import build_map_model, map_svg
+from ui.checks.demo_login_helpers import demo_login, isolate_demo_storage, switch_demo_role
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -162,7 +163,9 @@ class DevelopmentMapTests(unittest.TestCase):
         self.assertIsNone(self.model(empty)["selected_skill"])
 
     def test_streamlit_map_selection_completion_and_profile_switch(self):
+        isolate_demo_storage(self)
         app = AppTest.from_file(str(ROOT / "app.py"), default_timeout=30).run()
+        demo_login(app)
         self.assertFalse(app.exception)
         self.assertFalse(app.error)
         app.session_state["employee_tab"] = "Карта развития"
@@ -186,11 +189,13 @@ class DevelopmentMapTests(unittest.TestCase):
         fresh = app.session_state["views"][(1, "E0001")]
         self.assertGreater(fresh["trajectory"]["progress_pct"], before["trajectory"]["progress_pct"])
         self.assertEqual(app.selectbox(key="map-event-E0001").value, "EV_036")
+        switch_demo_role(app, "employee", "E0002")
         app.session_state["employee_tab"] = "Карта развития"
-        app.selectbox(key="employee_id").select("E0002").run()
+        app.run()
         self.assertFalse(app.exception)
         self.assertFalse(app.error)
-        self.assertNotIn("E0002", app.session_state["map_completions"])
+        completions = app.session_state["map_completions"] if "map_completions" in app.session_state else {}
+        self.assertNotIn("E0002", completions)
 
 
 if __name__ == "__main__":

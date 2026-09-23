@@ -8,6 +8,7 @@ from unittest.mock import patch
 from core import ai, api
 from streamlit.testing.v1 import AppTest
 from ui.core_adapter import AdapterError, CoreAdapter
+from ui.checks.demo_login_helpers import demo_login, isolate_demo_storage
 
 ROOT = Path(__file__).resolve().parents[2]
 DATA = ROOT / "case/case_1/career_quest_dataset"
@@ -15,6 +16,7 @@ DATA = ROOT / "case/case_1/career_quest_dataset"
 
 class CoreIntegrationTests(unittest.TestCase):
     def setUp(self):
+        isolate_demo_storage(self)
         ai._CACHE.clear()
         ai._FAILURES.clear()
         env = patch.dict(os.environ, {"CAREER_QUEST_AI_PROVIDER": "none"})
@@ -46,6 +48,7 @@ class CoreIntegrationTests(unittest.TestCase):
         with patch.dict(os.environ, {"CAREER_QUEST_AI_PROVIDER": "openai", "CAREER_QUEST_AI_MODEL": "synthetic-model", "OPENAI_API_KEY": "synthetic-test-token"}), \
              patch.object(ai, "_bounded_request", side_effect=TimeoutError) as provider:
             app = AppTest.from_file(str(ROOT / "app.py"), default_timeout=30).run()
+            demo_login(app)
         self.assertFalse(app.exception)
         self.assertFalse(app.error)
         view = app.session_state["views"][(0, "E0001")]

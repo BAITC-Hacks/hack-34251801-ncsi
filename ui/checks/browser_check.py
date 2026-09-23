@@ -12,6 +12,8 @@ from pathlib import Path
 
 from playwright.sync_api import expect, sync_playwright
 
+from .browser_login_helpers import login_demo, switch_demo_role
+
 ROOT = Path(__file__).resolve().parents[2]
 
 
@@ -38,6 +40,7 @@ def main():
         page = browser.new_page(viewport={"width": 1366, "height": 768}, device_scale_factor=1)
         page.set_default_timeout(30000)
         page.goto(args.url, wait_until="networkidle")
+        login_demo(page, "employee", "E0001")
         expect(page.get_by_role("heading", name="Ваш следующий шаг", exact=True)).to_be_visible()
         page.locator(".cq-footer").wait_for()
         page.get_by_role("tab", name="Мой маршрут", exact=True).click()
@@ -67,7 +70,7 @@ def main():
         after = page.locator(".cq-progress strong").inner_text()
         assert float(after.rstrip("%")) > float(before.rstrip("%"))
         results.append(f"Completion updates progress: {before} -> {after}; recommendations refreshed")
-        page.get_by_text("HR", exact=True).click()
+        switch_demo_role(page, "hr")
         page.get_by_role("tab", name="Обзор команды", exact=True).click()
         expect(page.get_by_role("heading", name="Развитие команды", exact=True)).to_be_visible()
         expect(page.get_by_role("heading", name="Участие по активностям", exact=True)).to_be_visible()
@@ -77,7 +80,7 @@ def main():
         page.locator('[data-testid="stMain"]').evaluate("el => el.scrollTo(0, 0)")
         page.screenshot(path=str(output / "03-hr-1366.png"))
         results.append("HR gaps, employees needing support and event participation visible")
-        page.get_by_text("Импорт данных", exact=True).click()
+        switch_demo_role(page, "admin")
         expect(page.get_by_role("heading", name="Добавьте данные для проверки", exact=True)).to_be_visible()
         inputs = page.locator('input[type="file"]')
         expect(inputs).to_have_count(2)
@@ -86,7 +89,7 @@ def main():
         page.get_by_role("button", name="Импортировать данные", exact=True).click()
         expect(page.get_by_text(re.compile("Импорт завершён. Новых сотрудников: 1"))).to_be_visible()
         page.screenshot(path=str(output / "04-import-success.png"))
-        page.get_by_text("Сотрудник", exact=True).click()
+        switch_demo_role(page, "employee", profile["employee_id"])
         page.get_by_role("tab", name="Мой маршрут", exact=True).click()
         expect(page.locator(".cq-subtitle").filter(has_text=profile["full_name"]).first).to_be_visible()
         assert not page.evaluate("document.documentElement.scrollWidth > innerWidth"), "Long employee name overflows"
@@ -97,17 +100,15 @@ def main():
         expect(page.get_by_text(re.compile("Активность.*завершена"))).to_be_visible()
         expect(page.locator(".cq-progress strong")).not_to_have_text(before_imported)
         results.append("Profile and history jointly imported; same core recommends and completes activity for new profile; long name wraps")
-        page.get_by_text("Импорт данных", exact=True).click()
+        switch_demo_role(page, "admin")
         page.locator('input[type="file"]').nth(0).set_input_files(str(bad_upload))
         page.get_by_role("button", name="Импортировать данные", exact=True).click()
         expect(page.get_by_text(re.compile("Не удалось прочитать файл"))).to_be_visible()
-        page.get_by_text("Сотрудник", exact=True).click()
+        switch_demo_role(page, "employee", profile["employee_id"])
         expect(page.locator(".cq-subtitle").filter(has_text=profile["full_name"]).first).to_be_visible()
         results.append("Malformed upload rejected without losing the imported profile")
-        # Select another arbitrary existing employee through the actual combobox.
-        combo = page.get_by_role("combobox", name="Профиль сотрудника")
-        combo.fill("E0002")
-        page.get_by_role("option", name=re.compile("E0002")).click()
+        # Employees view their selected profile; choose another one at demo login.
+        switch_demo_role(page, "employee", "E0002")
         expect(page.locator(".cq-subtitle").filter(has_text="Arman Zhaksylykov").first).to_be_visible()
         results.append("Arbitrary employee selection works through the UI")
         browser.close()
