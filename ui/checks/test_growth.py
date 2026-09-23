@@ -12,6 +12,7 @@ from unittest.mock import patch
 from core import api
 from core.growth import GrowthService, GrowthStore, TRAITS
 from core.growth_ai import GrowthAdvisor, request_payload
+from ui.core_adapter import CoreAdapter
 
 DATA = Path(__file__).resolve().parents[2] / 'case/case_1/career_quest_dataset'
 
@@ -86,6 +87,18 @@ class GrowthTests(unittest.TestCase):
     def test_future_start_never_gives_negative_xp(self):
         self.service.save_profile(self.data, self.eid, date.today()+timedelta(days=30), dict.fromkeys(TRAITS, 0), actor='hr')
         self.assertEqual(self.service.snapshot(self.data, self.eid)['xp'], 0)
+
+    def test_legacy_simulation_cannot_change_approved_skills_on_review_day(self):
+        self.data['employees'][0]['last_review_date'] = self.data['as_of_date']
+        adapter = CoreAdapter(DATA)
+        adapter.managed_ai = True
+        adapter._growth = self.service
+        before = self.service.facts(self.data, self.eid)
+        view = adapter.get_employee_view(self.data, self.eid)
+        updated, after_view = adapter.complete_activity(self.data, self.eid, view['recommendations'][0]['event_id'])
+        self.assertGreater(after_view['trajectory']['progress_pct'], view['trajectory']['progress_pct'])
+        self.assertEqual(self.service.facts(updated, self.eid), before)
+        self.assertNotIn('_growth_baselines', self.data)
 
     def test_missing_key_never_calls_provider_or_reserves_money(self):
         with patch('core.growth_ai._bounded_http') as transport:

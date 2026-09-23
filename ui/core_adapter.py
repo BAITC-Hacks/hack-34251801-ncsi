@@ -195,6 +195,8 @@ class CoreAdapter:
 
     def complete_activity(self, dataset, employee_id, event_id):
         candidate = deepcopy(dataset)
+        if getattr(self, 'managed_ai', False) and self.api.__name__ == 'core.api':
+            self.growth.preserve_baseline_before_simulation(candidate, employee_id)
         result = self.api.complete_activity(candidate, employee_id, event_id)
         updated = self._mutation_dataset(candidate, result)
         # Required re-query, also validates the candidate before it enters session state.

@@ -189,7 +189,9 @@ class GrowthService:
         profile = self.profile(dataset, employee_id)
         certificates = self.store.rows('certificates', employee_id)
         approved = [c for c in certificates if c['status'] == 'approved']
-        person = engine.employee(dataset, employee_id)
+        person = deepcopy(engine.employee(dataset, employee_id))
+        if employee_id in dataset.get('_growth_baselines', {}):
+            person['skills'] = dataset['_growth_baselines'][employee_id]
         # UI_ records are the old starter-kit simulation, not HR-approved certificates.
         baseline_history = [h for h in dataset['history'] if h['employee_id'] == employee_id and not h['record_id'].startswith('UI_')]
         levels = engine.current_levels(dataset, person, baseline_history)
@@ -209,6 +211,13 @@ class GrowthService:
                 'skills': levels, 'xp': xp, 'tenure_xp': days * 10, 'learning_xp': len(approved) * 100,
                 'level': 1 + xp // 1000, 'level_xp': xp % 1000, 'next_level_xp': 1000,
                 'requests': self.store.rows('training_requests', employee_id)}
+
+    @staticmethod
+    def preserve_baseline_before_simulation(dataset, employee_id):
+        # The legacy engine mutates baseline skills when review and snapshot dates
+        # coincide. Keep those demo changes outside the HR-approved portfolio.
+        person = engine.employee(dataset, employee_id)
+        dataset.setdefault('_growth_baselines', {}).setdefault(employee_id, deepcopy(person['skills']))
 
     def facts(self, dataset, employee_id):
         snapshot = self.snapshot(dataset, employee_id)
