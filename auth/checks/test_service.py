@@ -94,6 +94,31 @@ class AuthServiceTests(unittest.TestCase):
         with self.assertRaises(TypeError):
             self.service.register("Имя", "other@example.test", PASSWORD, PASSWORD, role="admin")
 
+    def test_default_login_automatically_uses_stored_role_for_all_account_types(self):
+        for role in ("employee", "hr", "admin"):
+            with self.subTest(role=role):
+                email = f"auto.{role}@example.test"
+                self.register(email)
+                if role != "employee":
+                    self.service.assign_role(email, role)
+                token, user = self.service.login(email, PASSWORD)
+                self.assertEqual(user["role"], role)
+                self.assertEqual(self.service.current_user(token)["role"], role)
+
+    def test_automatic_login_returns_latest_role_changed_while_hashing(self):
+        self.register()
+        original_scrypt = hashlib.scrypt
+
+        def hash_then_change_role(*args, **kwargs):
+            result = original_scrypt(*args, **kwargs)
+            self.service.assign_role("employee@example.test", "hr")
+            return result
+
+        with patch("auth.service.hashlib.scrypt", side_effect=hash_then_change_role):
+            token, user = self.service.login("employee@example.test", PASSWORD)
+        self.assertEqual(user["role"], "hr")
+        self.assertEqual(self.service.current_user(token)["role"], "hr")
+
     def test_unknown_and_inactive_account_have_same_generic_error(self):
         self.register()
         with closing(sqlite3.connect(self.path)) as conn:
