@@ -9,6 +9,7 @@ from streamlit.testing.v1 import AppTest
 from core import api
 from core.growth import GrowthService, GrowthStore
 from ui.checks.test_growth import provider_response
+from ui.checks.demo_login_helpers import demo_login, isolate_demo_storage, switch_demo_role
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -18,6 +19,7 @@ class GrowthUIFlowTests(unittest.TestCase):
         temp = tempfile.TemporaryDirectory()
         self.addCleanup(temp.cleanup)
         self.db = Path(temp.name) / 'growth.sqlite3'
+        isolate_demo_storage(self, growth_path=self.db)
         env = patch.dict(os.environ, {'CAREER_QUEST_GROWTH_DB': str(self.db), 'OPENAI_API_KEY': '', 'CAREER_QUEST_AI_PROVIDER': 'none'})
         env.start()
         self.addCleanup(env.stop)
@@ -28,11 +30,12 @@ class GrowthUIFlowTests(unittest.TestCase):
         app = AppTest.from_file(str(ROOT / 'app.py'), default_timeout=30).run()
         self.assertFalse(app.exception)
         self.assertFalse(app.error)
-        return app
+        return demo_login(app)
 
     def tab(self, app, value, hr=False):
+        switch_demo_role(app, 'hr' if hr else 'employee')
         app.session_state['hr_tab' if hr else 'employee_tab'] = value
-        app.radio(key='mode').set_value('HR' if hr else 'Сотрудник').run()
+        app.run()
         self.assertFalse(app.exception)
         return app
 

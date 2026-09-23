@@ -7,6 +7,8 @@ from pathlib import Path
 
 from playwright.sync_api import expect, sync_playwright
 
+from .browser_login_helpers import login_demo, switch_demo_role
+
 # Check actual foreground/background pairs, not the presence of CSS rules.
 CONTRAST = """el => {
     const rgba = color => color.match(/[\\d.]+/g).map(Number);
@@ -83,6 +85,7 @@ def main():
             page = context.new_page()
             page.set_default_timeout(30000)
             page.goto(args.url, wait_until="networkidle")
+            login_demo(page, "employee", "E0001")
             page.locator(".cq-footer").wait_for()
             page.evaluate("document.fonts.ready")
             label = f"{scheme}-{saved or 'system'}"
@@ -96,8 +99,10 @@ def main():
             minimum = min(minimum, readable_text(page))
             expect(page.get_by_role("button", name="Завершить активность", exact=True)).to_be_in_viewport(ratio=1)
             page.screenshot(path=str(output / f"{label}-employee.png"))
-            for mode, heading in [("HR", "Развитие команды"), ("Импорт данных", "Добавьте данные для проверки")]:
-                page.get_by_text(mode, exact=True).click()
+            for role, heading in [("hr", "Развитие команды"), ("admin", "Добавьте данные для проверки")]:
+                switch_demo_role(page, role)
+                if role == "hr":
+                    page.get_by_role("tab", name="Обзор команды", exact=True).click()
                 expect(page.get_by_role("heading", name=heading, exact=True)).to_be_visible()
                 minimum = min(minimum, readable_text(page))
             expect(page.locator('[data-testid="stException"]')).to_have_count(0)

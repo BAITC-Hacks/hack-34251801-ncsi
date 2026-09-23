@@ -10,6 +10,8 @@ from pathlib import Path
 
 import streamlit as st
 
+from auth.demo_session import end_demo_session, get_demo_identity
+from auth.demo_ui import render_demo_login
 from ui.components import STATUSES, e, empty_state, html, journey, number, page_heading, recommendation_content, skill_card, stat
 from ui.core_adapter import AdapterError, CoreAdapter
 from ui.development_map import render_development_map
@@ -229,7 +231,7 @@ def render_import(adapter, employees):
                 st.session_state.map_completions = {}
                 if new_ids:
                     st.session_state.pending_employee = new_ids[0]
-                st.session_state.flash = f"Импорт завершён. Новых сотрудников: {len(new_ids)}. История учтена движком. Перейдите в режим «Сотрудник»."
+                st.session_state.flash = f"Импорт завершён. Новых сотрудников: {len(new_ids)}. История учтена движком. Выйдите и войдите как сотрудник, выбрав новый профиль."
                 st.rerun()
             except Exception as exc:
                 show_error(exc, "импортировать данные")
@@ -250,9 +252,35 @@ def render_import(adapter, employees):
     st.info("Изменения хранятся в сессии демонстрации. Переключение экранов сохраняет прогресс; новый сеанс браузера начинает с исходного датасета.")
 
 
+def render_admin_status(adapter, employees):
+    page_heading("Состояние приложения", "Данные и подключённые возможности текущего прототипа.", "Администратор · Обзор")
+    a, b, c = st.columns(3)
+    with a:
+        stat("Профилей сотрудников", len(employees), "Включая импорт в этой сессии")
+    with b:
+        stat("Навыков в каталоге", len(adapter.catalog), "Требования стартового кита")
+    with c:
+        stat("Активностей", len(adapter.events), "Общий каталог обучения")
+    st.subheader("Подключения")
+    st.dataframe([
+        {"Компонент": "Вход", "Состояние": "Демонстрация ролей · без паролей и базы аккаунтов"},
+        {"Компонент": "Движок", "Состояние": "Предпросмотр" if adapter.is_demo else "core/api.py · подключён"},
+        {"Компонент": "AI-поиск курсов", "Состояние": "Ключ настроен; запуск по кнопке" if os.environ.get("OPENAI_API_KEY") else "Ключ не задан; доступен маршрут по правилам"},
+        {"Компонент": "Профили и история", "Состояние": "Стартовый кит и изменения текущей сессии"},
+        {"Компонент": "Сертификаты и решения HR", "Состояние": "Локальное хранилище модуля развития"},
+    ], hide_index=True, width="stretch")
+    if not adapter.is_demo:
+        budget = adapter.growth.budget()
+        st.subheader("Бюджет AI")
+        st.caption("Открытие этой страницы не отправляет запрос к модели.")
+        left, right = st.columns(2)
+        left.metric("Учтено / зарезервировано", f"{budget['used']:.3f} USD")
+        right.metric("Лимит", f"{budget['limit']:.2f} USD")
+    st.info("Это проверка интерфейса. Роль выбирается свободно; проверка аккаунта и управление правами здесь не включены.")
+
+
 def main():
     st.set_page_config(page_title="Career Quest · Halyk", page_icon="🌿", layout="wide", initial_sidebar_state="expanded")
-    html("<style>" + (ROOT / "styles/main.css").read_text(encoding="utf-8") + "</style>")
     try:
         adapter = CoreAdapter(DATA_DIR)
         # Paid calls are explicit and metered by the growth service; no legacy
@@ -268,24 +296,39 @@ def main():
         page_heading("Не удалось открыть данные", "Проверьте путь к стартовому киту и готовность core/api.py.")
         show_error(exc, "загрузить датасет")
         st.stop()
+    identity = get_demo_identity(employees)
+    if identity is None:
+        render_demo_login(employees)
+        st.stop()
+
+    # The demo gate only chooses a screen. Keep the real dataset and engine,
+    # including the existing HR workflow and explicitly metered AI requests.
+    html("<style>" + (ROOT / "styles/main.css").read_text(encoding="utf-8") + "</style>")
+    role = identity["role"]
+    role_label = {"employee": "Сотрудник", "hr": "HR", "admin": "Администратор"}[role]
+    choices = {emp["employee_id"]: emp for emp in employees}
+    employee_id = identity.get("employee_id")
+    admin_page = None
     with st.sidebar:
         html('<div class="cq-brand"><div class="cq-mark">cq</div><div><strong>Career Quest</strong><small>HALYK · РАЗВИТИЕ</small></div></div><div class="cq-rule"></div>')
-        mode = st.radio("Демонстрационный режим", ["Сотрудник", "HR", "Импорт данных"], key="mode")
-        st.caption("Переключение для показа MVP. Это не разграничение доступа.")
+        st.subheader(role_label)
+        st.caption("Деморежим · без паролей. Выбор роли не является разграничением доступа.")
+        if st.button("Выйти / сменить роль", key="cq_demo_logout", width="stretch"):
+            end_demo_session()
+            st.rerun()
         html('<div class="cq-rule"></div>')
-        choices = {emp["employee_id"]: emp for emp in employees}
         ids = list(choices)
-        if not ids:
-            st.warning("Нет сотрудников. Загрузите профили.")
-            employee_id = None
-        else:
-            pending = st.session_state.pop("pending_employee", None)
-            if pending in ids:
-                st.session_state.employee_id = pending
-            if st.session_state.get("employee_id") not in ids:
-                st.session_state.employee_id = ids[0]
-            employee_id = st.selectbox("Профиль сотрудника", ids,
-                                       format_func=lambda eid: f'{choices[eid].get("full_name", eid)} · {eid}', key="employee_id")
+        if role == "hr":
+            if ids:
+                if st.session_state.get("employee_id") not in ids:
+                    st.session_state.employee_id = ids[0]
+                employee_id = st.selectbox("Профиль сотрудника", ids,
+                                           format_func=lambda eid: f'{choices[eid].get("full_name", eid)} · {eid}', key="employee_id")
+            else:
+                st.warning("Нет сотрудников. Для загрузки профилей войдите как администратор.")
+        elif role == "admin":
+            admin_page = st.radio("Раздел администратора", ["Импорт данных", "Состояние приложения"], key="admin_page")
+        if employee_id in choices:
             person = choices[employee_id]
             initials = "".join(part[0] for part in person.get("full_name", "CQ").split()[:2])
             html(f'<div class="cq-person"><div class="cq-avatar">{e(initials)}</div><strong>{e(person.get("full_name", employee_id))}</strong><p>{e(person.get("role", ""))}</p><span class="cq-pill">{e(person.get("grade", ""))}</span><span class="cq-pill">{e(person.get("tenure_months", "—"))} мес. в компании</span></div>')
@@ -297,14 +340,17 @@ def main():
     if "flash" in st.session_state:
         st.success(st.session_state.pop("flash"))
     try:
-        if mode == "Импорт данных":
-            render_import(adapter, employees)
-        elif mode == "HR":
+        if role == "admin":
+            if admin_page == "Состояние приложения":
+                render_admin_status(adapter, employees)
+            else:
+                render_import(adapter, employees)
+        elif role == "hr":
             render_hr(adapter, employees)
-        elif employee_id:
+        elif role == "employee" and employee_id:
             render_employee(adapter, employee_id)
         else:
-            page_heading("Начните с профиля", "Откройте «Импорт данных» и добавьте сотрудников.")
+            page_heading("Начните с профиля", "Выйдите и войдите как администратор, чтобы добавить сотрудников.")
     except Exception as exc:
         show_error(exc, "построить представление")
     html('<div class="cq-footer"><span>Career Quest · HackAlem AI · 2026</span><span>Развитие — совместное решение сотрудника и руководителя</span></div>')
