@@ -1,0 +1,30 @@
+:root { --green: #087f5b; --ink: #173b32; }
+.stApp { background: #f5f8f5; color: var(--ink); }
+.block-container { max-width: 1230px; padding: 3.7rem 2rem 3rem; }
+h1,h2,h3 { color: #153e32; letter-spacing: -.035em; }
+h1 { font-size: 1.65rem !important; }
+h3 { font-size: 1.22rem !important; }
+[data-testid="stSidebar"] { background: #edf3ed; }
+[data-testid="stVerticalBlockBorderWrapper"] { background: white; border-radius: 18px; }
+.stButton button[kind="primary"], .stFormSubmitButton button[kind="primary"] { background: #087f5b; border-color: #087f5b; color: white; border-radius: 10px; min-height: 44px; }
+.stButton button { border-radius: 10px; }
+.eyebrow { color: #087f5b; font-size: .73rem; font-weight: 750; letter-spacing: .13em; text-transform: uppercase; margin-bottom: .45rem; }
+.hero { background: #e3f0e5; padding: 12px 20px; border-radius: 18px; margin: 0 0 8px; border: 1px solid #d2e5d5; }
+.hero h2 { margin: 0; padding: 0; font-size: 1.35rem; }
+.hero .eyebrow { margin-bottom: 3px; }
+.hero p { margin: 8px 0 0; color: #426253; }
+.route { display: flex; justify-content: space-between; gap: 16px; align-items: center; margin: 12px 0; }
+.route strong { font-size: 1.5rem; }
+.route span { color: #5d7368; }
+.gain { display: inline-block; padding: 7px 11px; background: #edf6ef; color: #136347; border-radius: 8px; margin: 4px 6px 4px 0; font-size: .86rem; }
+.skill-row { margin: 12px 0 4px; display:flex; justify-content:space-between; gap:14px; }
+.skill-row span { color: #536d61; }
+.skill-track { height: 8px; background: #eaf0eb; border-radius: 10px; position:relative; margin-bottom: 13px; }
+.skill-fill { height:100%; background:#168a65; border-radius:10px; }
+.skill-target { position:absolute; top:-3px; height:14px; width:2px; background:#d7a839; }
+.stMarkdown p, .stMarkdown li, h3 { overflow-wrap: anywhere; }
+[data-testid="stVerticalBlock"] { gap: .65rem; }
+.stMarkdown p { margin-bottom: .35rem; }
+[data-testid="stLayoutWrapper"]:has(> [data-testid="stVerticalBlock"][data-test-scroll-behavior]) { background: white; }
+[data-testid="stMetricValue"] { font-size: 1.8rem; }
+@media(max-width:800px) { .block-container {padding:1rem;} .route strong {font-size:1.15rem;} }
