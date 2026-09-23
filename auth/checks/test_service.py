@@ -40,7 +40,8 @@ class AuthServiceTests(unittest.TestCase):
         self.assertEqual(len(rows[0]["password_hash"]), 64)
         token, user = self.service.login(first["email"], PASSWORD, "employee")
         self.assertEqual(user, first)
-        self.assertEqual(set(user), {"user_id", "name", "email", "role", "active"})
+        self.assertEqual(set(user), {"user_id", "name", "email", "role", "active", "employee_id"})
+        self.assertIsNone(user["employee_id"])
         session = self.rows("SELECT * FROM auth_sessions")[0]
         self.assertEqual(session["token_hash"], hashlib.sha256(token.encode()).digest())
         database = self.path.read_bytes()

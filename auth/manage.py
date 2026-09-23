@@ -7,11 +7,12 @@ import getpass
 import sys
 
 from .service import AuthError, AuthService, ROLES
+from storage.config import configure_storage
 
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Настройка учётных записей Career Quest на сервере.")
-    parser.add_argument("--db", help="Путь к SQLite; иначе CAREER_QUEST_AUTH_DB или auth/.local/auth.sqlite3.")
+    parser.add_argument("--db", help="Путь к SQLite; иначе путь из локальных настроек хранилища.")
     subparsers = parser.add_subparsers(dest="command", required=True)
     subparsers.add_parser("create-admin", help="Интерактивно создать первого администратора.")
     role_parser = subparsers.add_parser("set-role", help="Изменить роль зарегистрированного аккаунта и отозвать его сессии.")
@@ -19,6 +20,7 @@ def main(argv: list[str] | None = None) -> int:
     role_parser.add_argument("--role", choices=sorted(ROLES), required=True)
     args = parser.parse_args(argv)
     try:
+        configure_storage()
         service = AuthService(args.db)
         if args.command == "create-admin":
             name = input("Имя администратора: ")
