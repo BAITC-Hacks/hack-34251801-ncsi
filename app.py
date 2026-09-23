@@ -297,6 +297,16 @@ def render_admin_status(adapter, employees):
         st.info('Это проверка интерфейса. Роль выбирается свободно; проверка аккаунта и управление правами здесь не включены.')
 
 
+def logout_account(service):
+    try:
+        service.logout(st.session_state.get(TOKEN_KEY))
+    except (ValueError, OSError) as exc:
+        show_error(exc, 'выйти из аккаунта')
+    else:
+        st.session_state.clear()
+        st.rerun()
+
+
 def main():
     st.set_page_config(page_title="Career Quest · Halyk", page_icon="🌿", layout="wide", initial_sidebar_state="expanded")
     demo_mode = os.environ.get('CAREER_QUEST_DEMO_MODE') == '1'
@@ -353,6 +363,14 @@ def main():
     html("<style>" + (ROOT / "styles/main.css").read_text(encoding="utf-8") + "</style>")
     role = identity["role"]
     role_label = {"employee": "Сотрудник", "hr": "HR", "admin": "Администратор"}[role]
+    if not demo_mode:
+        with st.container(key='cq_account_bar'):
+            account, sign_out = st.columns([3, 1], vertical_alignment='center')
+            with account:
+                html(f'<div class="cq-account-summary"><strong>{e(role_label)}</strong><span>{e(identity["email"])}</span></div>')
+            with sign_out:
+                if st.button('Выйти из аккаунта', key='cq_auth_logout', width='stretch'):
+                    logout_account(service)
     choices = {emp["employee_id"]: emp for emp in employees}
     employee_id = identity.get("employee_id")
     admin_page = None
@@ -360,12 +378,8 @@ def main():
         html('<div class="cq-brand"><div class="cq-mark">cq</div><div><strong>Career Quest</strong><small>HALYK · РАЗВИТИЕ</small></div></div><div class="cq-rule"></div>')
         st.subheader(role_label)
         st.caption('Деморежим · без паролей. Выбор роли не является разграничением доступа.' if demo_mode else identity['email'])
-        if st.button('Выйти / сменить роль' if demo_mode else 'Выйти из аккаунта', key='cq_demo_logout' if demo_mode else 'cq_auth_logout', width='stretch'):
-            if demo_mode:
-                end_demo_session()
-            else:
-                service.logout(st.session_state.get(TOKEN_KEY))
-                st.session_state.clear()
+        if demo_mode and st.button('Выйти / сменить роль', key='cq_demo_logout', width='stretch'):
+            end_demo_session()
             st.rerun()
         html('<div class="cq-rule"></div>')
         ids = list(choices)

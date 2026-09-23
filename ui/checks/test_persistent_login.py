@@ -81,11 +81,14 @@ class PersistentLoginTests(unittest.TestCase):
         self.assertNotIn(TOKEN_KEY, app.session_state)
 
     def login(self, app, email=EMPLOYEE_EMAIL, role="employee"):
-        self.group(app, "cq_auth_role").set_value(role).run()
+        self.assertFalse(any(widget.key == "cq_auth_role" for widget in app.get("button_group")))
         self.field(app, "Рабочая почта").set_value(email)
         self.field(app, "Пароль").set_value(PASSWORD)
         self.button(app, "Войти в Career Quest →").click().run()
-        return self.clean(app)
+        self.clean(app)
+        user = AuthService(self.auth_path).current_user(app.session_state[TOKEN_KEY])
+        self.assertEqual(user["role"], role)
+        return app
 
     def register(self, app, email=EMPLOYEE_EMAIL):
         self.group(app, "cq_auth_mode").set_value("Регистрация").run()
@@ -128,10 +131,40 @@ class PersistentLoginTests(unittest.TestCase):
         self.login(fresh, ADMIN_EMAIL, "admin")
         self.assertEqual(len(fresh.selectbox(key="account_to_manage").options), 1)
 
+    def test_admin_logout_stays_outside_sidebar_in_every_section_and_clears_session(self):
+        app = self.bootstrap()
+        token = app.session_state[TOKEN_KEY]
+        for section in ("Пользователи", "Импорт данных", "Состояние приложения"):
+            with self.subTest(section=section):
+                app.radio(key="admin_page").set_value(section).run()
+                self.clean(app)
+                self.assertFalse(any(button.key == "cq_auth_logout" for button in app.sidebar.button))
+                self.assertEqual(app.button(key="cq_auth_logout").label, "Выйти из аккаунта")
+                self.assertFalse(app.button(key="cq_auth_logout").disabled)
+        # Session-only state must disappear alongside the revoked token, while
+        # persistent data is already covered by the restart regression below.
+        self.assertIn("dataset", app.session_state)
+        self.assertIn("views", app.session_state)
+        app.session_state["employee_id"] = "E0002"
+        app.session_state["pending_employee"] = "E0003"
+        app.session_state["cq_auth_role"] = "admin"
+        app.button(key="cq_auth_logout").click().run()
+        self.clean(app)
+        self.assertIsNone(AuthService(self.auth_path).current_user(token))
+        for key in (TOKEN_KEY, "dataset", "views", "revision", "cq_account_context",
+                    "employee_id", "pending_employee", "cq_auth_role"):
+            self.assertNotIn(key, app.session_state)
+        self.assertFalse(app.sidebar.button)
+        self.assertFalse(any(button.key == "cq_auth_logout" for button in app.button))
+        self.assertFalse(any(widget.key == "cq_auth_role" for widget in app.get("button_group")))
+        self.assertEqual({field.label for field in app.text_input}, {"Рабочая почта", "Пароль"})
+        self.assertTrue(any(button.label == "Войти в Career Quest →" for button in app.button))
+
     def test_registration_waits_for_admin_profile_assignment_and_enforces_ownership(self):
         admin_app = self.bootstrap()
         employee_app = self.app()
         self.register(employee_app)
+        employee_app.session_state["cq_auth_role"] = "admin"
         self.login(employee_app)
         service = AuthService(self.auth_path)
         old_token = employee_app.session_state[TOKEN_KEY]

@@ -39,7 +39,7 @@ _SCRYPT_SLOTS = threading.BoundedSemaphore(1)
 _DUMMY_SALT = secrets.token_bytes(32)
 _DUMMY_EXPECTED = secrets.token_bytes(64)
 _LOGIN_ERROR = (
-    "Не удалось войти. Проверьте почту, пароль и выбранную роль. "
+    "Не удалось войти. Проверьте почту и пароль. "
     "После нескольких неудачных попыток подождите 15 минут."
 )
 _STORAGE_ERROR = "Хранилище учётных записей недоступно. Повторите попытку позже."
@@ -234,8 +234,12 @@ class AuthService:
             conn.commit()
         return _safe_user(row)
 
-    def login(self, email: str, password: str, expected_role: str = "employee") -> tuple[str, dict]:
-        """Authenticate the selected role against the stored role, never grant it."""
+    def login(self, email: str, password: str, expected_role: str | None = None) -> tuple[str, dict]:
+        """Authenticate credentials and return the current stored account role.
+
+        An optional role assertion is retained for existing trusted callers; it
+        can reject a mismatch but can never grant or change a stored role.
+        """
         try:
             normalized = _normalize_email(email)
             valid_email = True
@@ -272,7 +276,8 @@ class AuthService:
             latest = conn.execute("SELECT * FROM auth_users WHERE user_id=?", (row["user_id"],)).fetchone() if row else None
             authenticated = bool(
                 not locked and valid_email and valid_password and matches and latest
-                and latest["active"] and latest["role"] == expected_role and expected_role in ROLES
+                and latest["active"] and latest["role"] in ROLES
+                and (expected_role is None or latest["role"] == expected_role)
                 and latest["password_version"] == 1
                 and hmac.compare_digest(bytes(row["password_hash"]), bytes(latest["password_hash"]))
             )
