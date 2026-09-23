@@ -259,7 +259,7 @@ def main():
         elif employee_id:
             render_employee(adapter, employee_id)
         else:
-            page_heading("Начните с профиля", "Откройте «Данные жюри» и добавьте сотрудников.")
+            page_heading("Начните с профиля", "Откройте «Импорт данных» и добавьте сотрудников.")
     except Exception as exc:
         show_error(exc, "построить представление")
     html('<div class="cq-footer"><span>Career Quest · HackAlem AI · 2026</span><span>Развитие — совместное решение сотрудника и руководителя</span></div>')

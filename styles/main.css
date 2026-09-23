@@ -4,6 +4,7 @@
 html, body, [data-testid="stApp"] { font-family:Manrope,Inter,"Segoe UI",sans-serif; color:var(--cq-ink); }
 [data-testid="stAppViewContainer"] { background:#f6f8f5; }
 [data-testid="stHeader"] { background:transparent; }
+[data-testid="stToolbar"] { display:none; }
 [data-testid="stMainBlockContainer"] { max-width:1260px; padding:1.6rem 2.4rem 3rem; }
 [data-testid="stSidebar"] { background:#fff; border-right:1px solid var(--cq-line); min-width:258px; max-width:258px; }
 [data-testid="stSidebarUserContent"] { padding:1rem .3rem; }
@@ -23,6 +24,8 @@ p { line-height:1.55; }
 [data-testid="stButton"] button p { white-space:normal; overflow-wrap:anywhere; }
 [data-testid="stVerticalBlockBorderWrapper"] > div { border-color:var(--cq-line)!important; border-radius:16px!important; background:#fff; }
 [class*="st-key-recommendation_"], .st-key-focus, .st-key-hr_gaps, .st-key-hr_support, .st-key-import_panel, .st-key-import_format { border-color:var(--cq-line)!important; border-radius:16px!important; background:#fff; padding:18px!important; }
+.st-key-hr_support { height:auto!important; }
+.st-key-hr_support > [data-testid="stElementContainer"] { flex-shrink:0; }
 [data-baseweb="select"] > div { border-radius:10px; background:#f8faf8; border-color:#dce5df; }
 [data-testid="stRadio"] label { font-size:.88rem; }
 [data-baseweb="tab-list"] { gap:1.6rem; border-bottom:1px solid var(--cq-line); }
