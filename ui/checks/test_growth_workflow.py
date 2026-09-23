@@ -89,6 +89,14 @@ class GrowthWorkflowTests(unittest.TestCase):
         self.assertEqual(api.get_employee_view(candidate, self.eid)['skills'], state['view']['skills'])
         self.assertEqual(self.data, self.original)
 
+    def test_future_catalog_ids_are_presented_as_names_without_awards(self):
+        plan = deepcopy(self.plan)
+        plan['tracks'][0]['next_skills'] = ['SK_API_DESIGN', 'Новая тема']
+        state = self.read(plan=plan)
+        label = next(s['name'] for s in self.data['skills'] if s['skill_id'] == 'SK_API_DESIGN')
+        self.assertEqual(state['tracks'][0]['next_skills'], [label, 'Новая тема'])
+        self.assertEqual(state['snapshot']['learning_xp'], 0)
+
     def test_hide_restore_persists_across_refresh_without_xp_or_cancelling(self):
         before = self.service.snapshot(self.data, self.eid)['xp']
         rid = self.choose()

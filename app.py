@@ -330,8 +330,9 @@ def main():
             admin_page = st.radio("Раздел администратора", ["Импорт данных", "Состояние приложения"], key="admin_page")
         if employee_id in choices:
             person = choices[employee_id]
+            tenure = f"С {adapter.growth.profile(st.session_state.dataset, employee_id)['hire_date']}" if not adapter.is_demo else f"{person.get('tenure_months', '—')} мес. в компании"
             initials = "".join(part[0] for part in person.get("full_name", "CQ").split()[:2])
-            html(f'<div class="cq-person"><div class="cq-avatar">{e(initials)}</div><strong>{e(person.get("full_name", employee_id))}</strong><p>{e(person.get("role", ""))}</p><span class="cq-pill">{e(person.get("grade", ""))}</span><span class="cq-pill">{e(person.get("tenure_months", "—"))} мес. в компании</span></div>')
+            html(f'<div class="cq-person"><div class="cq-avatar">{e(initials)}</div><strong>{e(person.get("full_name", employee_id))}</strong><p>{e(person.get("role", ""))}</p><span class="cq-pill">{e(person.get("grade", ""))}</span><span class="cq-pill">{e(tenure)}</span></div>')
         html('<p class="cq-sidebar-note">Рост начинается с понятного следующего шага.<br>Вы выбираете темп вместе с руководителем.</p>')
         if adapter.is_demo:
             st.warning("Предпросмотр UI: core/ ещё не подключён. Карточка E0001 — пример, AI не используется.")

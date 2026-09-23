@@ -245,6 +245,59 @@ class ResearchTests(unittest.TestCase):
         self.assertAlmostEqual(result['budget']['used'], .142)
         self.assertIsNone(result['plan_id'])
 
+    def test_incomplete_reasoning_response_preserves_safe_diagnostics_and_known_cost(self):
+        incomplete = response()
+        incomplete.update(status='incomplete', incomplete_details={'reason': 'max_output_tokens'})
+        incomplete['usage']['output_tokens'] = 3000
+        incomplete['usage']['output_tokens_details']['reasoning_tokens'] = 2990
+        incomplete['output'] = incomplete['output'][:1]
+        with patch('core.growth_ai._bounded_http', return_value=incomplete):
+            self.advisor.start('E1', FACTS)
+            result = self.settled()
+        self.assertEqual(result['error_code'], 'response_incomplete')
+        self.assertAlmostEqual(result['budget']['used'], .04225)
+        with self.store.connection() as db:
+            usage = json.loads(db.execute('SELECT usage FROM ai_calls').fetchone()[0])
+        self.assertEqual(usage['diagnostics'], {'response_id': '', 'response_status': 'incomplete', 'incomplete_reason': 'max_output_tokens',
+                                              'search_calls': 1, 'output_text_bytes': 0, 'validation_reason': 'response_incomplete',
+                                              'search_actions': [{'id': '', 'type': 'web_search_call', 'action': 'unknown', 'status': 'unknown'}]})
+        self.assertEqual(usage['output_tokens_details']['reasoning_tokens'], 2990)
+        self.assertNotIn('SOC', dump(usage))
+
+    def test_invalid_json_diagnostics_never_store_provider_text(self):
+        malformed = response()
+        malformed['output'][1]['content'][0]['text'] = 'private-provider-prose'
+        with patch('core.growth_ai._bounded_http', return_value=malformed):
+            self.advisor.start('E1', FACTS)
+            self.settled()
+        with self.store.connection() as db:
+            usage_text = db.execute('SELECT usage FROM ai_calls').fetchone()[0]
+        usage = json.loads(usage_text)
+        self.assertEqual(usage['diagnostics']['validation_reason'], 'invalid_json')
+        self.assertEqual(usage['diagnostics']['output_text_bytes'], 22)
+        self.assertNotIn('private-provider-prose', usage_text)
+
+    def test_extra_search_item_records_safe_action_diagnostics(self):
+        extra = response()
+        extra['id'] = 'resp_safe_123'
+        extra['output'][0].update(id='ws_first', status='completed')
+        extra['output'][0]['action']['type'] = 'search'
+        extra['output'].insert(1, {'type': 'web_search_call', 'id': 'ws_second', 'status': 'searching',
+                                   'action': {'type': 'open_page', 'url': 'https://example.com/private-data'}})
+        with patch('core.growth_ai._bounded_http', return_value=extra):
+            self.advisor.start('E1', FACTS)
+            result = self.settled()
+        self.assertEqual(result['error_code'], 'response_validation')
+        with self.store.connection() as db:
+            usage_text = db.execute('SELECT usage FROM ai_calls').fetchone()[0]
+        diagnostics = json.loads(usage_text)['diagnostics']
+        self.assertEqual(diagnostics['validation_reason'], 'search_count')
+        self.assertEqual(diagnostics['response_id'], 'resp_safe_123')
+        self.assertEqual(diagnostics['search_calls'], 2)
+        self.assertEqual(diagnostics['search_actions'][1], {'id': 'ws_second', 'type': 'web_search_call',
+                                                          'action': 'open_page', 'status': 'searching'})
+        self.assertNotIn('private-data', usage_text)
+
     def test_http_error_payload_cannot_leak_key_or_provider_message(self):
         for status, api_code, safe_code in ((401, 'invalid_api_key', 'authentication'),
                                           (404, 'model_not_found', 'model_access'),

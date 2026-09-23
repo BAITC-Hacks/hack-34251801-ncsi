@@ -307,8 +307,10 @@ class GrowthService:
             requests.append(request)
             by_course[request['course_id']] = request
         hidden_count = 0
+        skill_labels = {skill['skill_id']: skill['name'] for skill in dataset['skills']}
         for track in result.get('tracks', []):
             track['id'] = track_id(track)
+            track['next_skills'] = [skill_labels.get(skill, skill) for skill in track.get('next_skills', [])]
             for course in track.get('courses', []):
                 cid = course_id(course['url'])
                 request = by_course.get(cid)

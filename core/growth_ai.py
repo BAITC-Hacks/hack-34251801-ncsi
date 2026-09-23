@@ -51,6 +51,7 @@ _MESSAGES = {
     'network': 'Не удалось получить ответ OpenAI. Неизвестный расход сохранён; автоматического повтора нет.',
     'provider': 'OpenAI вернул ошибку сервиса. Автоматического повтора нет.',
     'response_validation': 'Ответ AI не прошёл проверку. Используйте сохранённый план и объяснение движка.',
+    'response_incomplete': 'AI не завершил ответ в пределах ограниченного бюджета ответа. Автоматического повтора нет; доступно объяснение движка.',
     'request_too_large': 'Портфолио слишком большое для экономного запроса. Запрос не отправлен.',
     'estimate_over_cap': 'Оценка стоимости превышает лимит подбора. Запрос не отправлен.',
     'budget_exhausted': 'Лимит приложения исчерпан. Новый запрос не отправлен.',
@@ -110,7 +111,9 @@ def request_payload(facts):
         'Return level/prerequisites, why suitable and price_text; unknown prices: "Уточнить у провайдера". '
         'Never promise free certification or invent URLs. Search only by learning topics, never names, '
         'employee IDs, HR ratings or certificate IDs. Never purchase or approve budgets; HR decides. '
-        'Be concise: one short sentence per explanation/why, short course names, at most 1800 answer tokens.'
+        'Search immediately with a single concise topic query, then produce final JSON without further research. '
+        'Keep reasoning short. Prefer 1-2 well-grounded tracks with 2 courses each; use a third only when warranted. '
+        'Be concise: one short sentence per explanation/why, short course names, at most 1200 answer tokens.'
     )
     payload = {'model': MODEL, 'store': False, 'instructions': instruction, 'input': dump(facts),
                'reasoning': {'effort': 'low'}, 'max_output_tokens': MAX_OUTPUT, 'max_tool_calls': 1,
@@ -131,6 +134,44 @@ def request_payload(facts):
 def _safe_request_id(value):
     value = str(value or '')
     return value if re.fullmatch(r'[A-Za-z0-9_-]{1,160}', value) else ''
+
+
+def _response_diagnostics(body):
+    """Allowlisted structural diagnostics, without provider prose or source text."""
+    status = body.get('status')
+    incomplete = body.get('incomplete_details') or {}
+    reason = incomplete.get('reason') if isinstance(incomplete, dict) else None
+    output = body.get('output') if isinstance(body.get('output'), list) else []
+    text_bytes = 0
+    for item in output:
+        if not isinstance(item, dict):
+            continue
+        for part in item.get('content', []) or []:
+            if isinstance(part, dict) and part.get('type') == 'output_text' and isinstance(part.get('text'), str):
+                text_bytes += len(part['text'].encode('utf-8'))
+    calls = []
+    for item in output:
+        if isinstance(item, dict) and item.get('type') == 'web_search_call':
+            action = item.get('action') or {}
+            kind = action.get('type') if isinstance(action, dict) else None
+            calls.append({'id': _safe_request_id(item.get('id')), 'type': 'web_search_call',
+                          'action': kind if kind in ('search', 'open_page', 'find_in_page') else 'unknown',
+                          'status': item.get('status') if item.get('status') in ('in_progress', 'searching', 'completed', 'failed') else 'unknown'})
+    return {'response_id': _safe_request_id(body.get('id')),
+            'response_status': status if status in ('completed', 'incomplete', 'failed', 'cancelled', 'in_progress', 'queued') else 'unknown',
+            'incomplete_reason': reason if reason in ('max_output_tokens', 'content_filter') else ('unknown' if reason else ''),
+            'search_calls': len(calls), 'search_actions': calls,
+            'output_text_bytes': text_bytes}
+
+
+def _validation_reason(error):
+    if isinstance(error, json.JSONDecodeError):
+        return 'invalid_json'
+    known = {'Incomplete response': 'incomplete', 'Exactly one search is required': 'search_count',
+             'Invalid plan': 'plan_fields', 'Invalid tracks': 'track_count', 'Invalid track fields': 'track_fields',
+             'Unsupported evidence': 'unsupported_evidence', 'Invalid next skills': 'future_skills',
+             'Invalid courses': 'course_count', 'Invalid course fields': 'course_fields'}
+    return known.get(str(error), 'invalid_field')
 
 
 class ResearchError(Exception):
@@ -392,7 +433,8 @@ class GrowthAdvisor:
         try:
             body = _bounded_http(payload, key)
             request_id = _safe_request_id(body.get('_request_id', ''))
-            usage = body.get('usage', {})
+            usage = dict(body.get('usage') or {})
+            usage['diagnostics'] = _response_diagnostics(body)
             incoming, outgoing = usage.get('input_tokens'), usage.get('output_tokens')
             if type(incoming) is not int or type(outgoing) is not int or min(incoming, outgoing) < 0:
                 raise ResearchError('response_validation', request_id)
@@ -403,6 +445,8 @@ class GrowthAdvisor:
             call_status = 'known'
             if charged > cap:
                 raise ResearchError('usage_over_cap', request_id)
+            if body.get('status') != 'completed':
+                raise ResearchError('response_incomplete', request_id)
             plan = validate_response(body, facts)
             plan_id = uuid4().hex
             with self.store.connection() as db:
@@ -410,12 +454,14 @@ class GrowthAdvisor:
             call_status = 'completed'
         except ResearchError as error:
             error_code, request_id = error.code, error.request_id or request_id
+            usage.setdefault('diagnostics', {})['validation_reason'] = error.code
             if error.known_unbilled:
                 charged, call_status = 0, 'rejected'
         except (TimeoutError, socket.timeout):
             error_code = 'timeout'
-        except (ValueError, TypeError, KeyError, AttributeError):
+        except (ValueError, TypeError, KeyError, AttributeError) as error:
             error_code = 'response_validation'
+            usage.setdefault('diagnostics', {})['validation_reason'] = _validation_reason(error)
         except Exception:
             error_code = 'network'
         finally:
