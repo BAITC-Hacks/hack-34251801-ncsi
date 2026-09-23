@@ -27,6 +27,9 @@ def main():
     profile["full_name"] = "Проверочный сотрудник с очень длинным именем для проверки переноса текста"
     upload = output / "jury_employees.json"
     upload.write_text(json.dumps({"employees": [profile]}, ensure_ascii=False), encoding="utf-8")
+    history_upload = output / "jury_history.csv"
+    history_upload.write_text("record_id,employee_id,event_id,date,due_date,status,completion_pct,score,feedback_rating,assigned_by\n"
+                              "JURY_BROWSER_H001,JURY_BROWSER_001,EV_005,2026-09-30,,no_show,0,,,self\n", encoding="utf-8")
     bad_upload = output / "invalid.json"
     bad_upload.write_text("{invalid}", encoding="utf-8")
     results = []
@@ -73,6 +76,7 @@ def main():
         inputs = page.locator('input[type="file"]')
         expect(inputs).to_have_count(2)
         inputs.nth(0).set_input_files(str(upload))
+        inputs.nth(1).set_input_files(str(history_upload))
         page.get_by_role("button", name="Импортировать данные", exact=True).click()
         expect(page.get_by_text(re.compile("Импорт завершён. Новых сотрудников: 1"))).to_be_visible()
         page.screenshot(path=str(output / "04-import-success.png"))
@@ -80,7 +84,12 @@ def main():
         expect(page.locator(".cq-subtitle").filter(has_text=profile["full_name"]).first).to_be_visible()
         assert not page.evaluate("document.documentElement.scrollWidth > innerWidth"), "Long employee name overflows"
         page.screenshot(path=str(output / "05-imported-profile.png"))
-        results.append("New profile imported through the same adapter, selected and rendered; long name wraps")
+        expect(page.locator(".cq-event-title").first).to_be_visible()
+        before_imported = page.locator(".cq-progress strong").inner_text()
+        page.get_by_role("button", name="Завершить активность", exact=True).click()
+        expect(page.get_by_text(re.compile("Активность.*завершена"))).to_be_visible()
+        expect(page.locator(".cq-progress strong")).not_to_have_text(before_imported)
+        results.append("Profile and history jointly imported; same core recommends and completes activity for new profile; long name wraps")
         page.get_by_text("Импорт данных", exact=True).click()
         page.locator('input[type="file"]').nth(0).set_input_files(str(bad_upload))
         page.get_by_role("button", name="Импортировать данные", exact=True).click()
