@@ -6,7 +6,7 @@ from types import SimpleNamespace
 from unittest.mock import Mock
 
 from ui import demo_adapter
-from ui.core_adapter import AdapterError, CoreAdapter
+from ui.core_adapter import AdapterError, CoreAdapter, _explanation_fields
 
 DATA = Path(__file__).resolve().parents[2] / "case/case_1/career_quest_dataset"
 
@@ -81,6 +81,21 @@ class AdapterContractTests(unittest.TestCase):
         self.assertIsNone(view["next_grade"])
         self.assertEqual(view["recommendations"], [])
         self.assertTrue(view["empty_reason"])
+
+    def test_ai_text_and_factors_remain_separate(self):
+        result = _explanation_fields({"ai_explanation": "Персональный совет", "factors": [
+            {"type": "grade", "value": "Junior"}, {"type": "skill_gap", "value": "1 → 2"},
+            {"type": "history", "value": "Не завершено"}]}, {})
+        self.assertEqual(result["display_explanation"], "Персональный совет")
+        self.assertEqual(result["display_explanation_source"], "ai")
+        self.assertEqual(len(result["display_factors"]), 3)
+
+    def test_ai_timeout_uses_engine_fallback(self):
+        result = _explanation_fields({"ai_explanation": "Незавершённый ответ", "ai_status": "timeout",
+                                      "deterministic_explanation": "Проверенное объяснение движка"}, {})
+        self.assertEqual(result["display_explanation"], "Проверенное объяснение движка")
+        self.assertEqual(result["display_explanation_source"], "rules")
+        self.assertTrue(result["ai_fallback"])
 
 
 if __name__ == "__main__":

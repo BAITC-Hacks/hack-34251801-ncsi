@@ -28,6 +28,49 @@ def _rows(value, id_field):
     return list(value or [])
 
 
+def _text(value):
+    if isinstance(value, dict):
+        return str(value.get("text") or value.get("explanation") or value.get("reason") or "")
+    return str(value or "")
+
+
+def _explanation_fields(rec, view):
+    """Display the engine's evidence; never ask a model or generate new reasons."""
+    ai = rec.get("ai_explanation", rec.get("personal_explanation"))
+    ai_meta = ai if isinstance(ai, dict) else {}
+    global_ai = view.get("ai", {}) if isinstance(view.get("ai"), dict) else {}
+    status = str(rec.get("ai_status", ai_meta.get("status", global_ai.get("status", "")))).lower()
+    source = str(rec.get("explanation_source", ai_meta.get("source", ""))).lower()
+    failed = status in {"timeout", "timed_out", "error", "failed", "fallback", "unavailable"}
+    fallback = _text(rec.get("deterministic_explanation") or rec.get("fallback_explanation"))
+    explanation = _text(rec.get("explanation"))
+    ai_text = _text(ai)
+    if failed:
+        display = fallback or explanation
+        display_source = "rules"
+    elif ai_text or source in {"ai", "llm", "openai", "nvidia"}:
+        display = ai_text or explanation
+        display_source = "ai"
+    else:
+        display = explanation or fallback
+        display_source = "demo" if source == "demo" else "rules"
+    factors = rec.get("factors", [])
+    if isinstance(factors, dict):
+        factors = [{"label": key, "value": value} for key, value in factors.items()]
+    texts = []
+    labels = {"grade": "Грейд", "skill_gap": "Разрыв по навыкам", "history": "История участия", "role": "Роль", "prerequisites": "Требования"}
+    for factor in factors:
+        if isinstance(factor, dict):
+            value = _text(factor.get("text") or factor.get("description") or factor.get("value"))
+            label = factor.get("label", factor.get("name", factor.get("type", "")))
+            label = labels.get(label, label)
+            texts.append(f"{label}: {value}" if label and value else value)
+        else:
+            texts.append(str(factor))
+    return {"display_explanation": display, "display_explanation_source": display_source,
+            "display_factors": [s for s in texts if s], "ai_fallback": failed}
+
+
 class CoreAdapter:
     def __init__(self, data_dir: str | Path, module=None):
         self.data_dir = Path(data_dir)
@@ -105,6 +148,7 @@ class CoreAdapter:
                 changes.append({**change, "name": change.get("name") or self.skill_name(sid),
                                 "before": before, "after": after, "gain": after - before})
             rec["skill_changes"] = changes
+            rec.update(_explanation_fields(rec, view))
             recommendations.append(rec)
         view["recommendations"] = recommendations
         view.setdefault("history", [])
