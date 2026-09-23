@@ -40,6 +40,7 @@ def main():
         page.goto(args.url, wait_until="networkidle")
         expect(page.get_by_role("heading", name="Ваш следующий шаг", exact=True)).to_be_visible()
         page.locator(".cq-footer").wait_for()
+        page.get_by_role("tab", name="Мой маршрут", exact=True).click()
         page.evaluate("document.fonts.ready")
         expect(page.get_by_role("button", name="Stop", exact=True)).not_to_be_visible()
         expect(page.locator('[data-testid="stException"]')).to_have_count(0)
@@ -67,6 +68,7 @@ def main():
         assert float(after.rstrip("%")) > float(before.rstrip("%"))
         results.append(f"Completion updates progress: {before} -> {after}; recommendations refreshed")
         page.get_by_text("HR", exact=True).click()
+        page.get_by_role("tab", name="Обзор команды", exact=True).click()
         expect(page.get_by_role("heading", name="Развитие команды", exact=True)).to_be_visible()
         expect(page.get_by_role("heading", name="Участие по активностям", exact=True)).to_be_visible()
         caption = page.locator('.st-key-hr_support [data-testid="stCaptionContainer"]').bounding_box()
@@ -85,6 +87,7 @@ def main():
         expect(page.get_by_text(re.compile("Импорт завершён. Новых сотрудников: 1"))).to_be_visible()
         page.screenshot(path=str(output / "04-import-success.png"))
         page.get_by_text("Сотрудник", exact=True).click()
+        page.get_by_role("tab", name="Мой маршрут", exact=True).click()
         expect(page.locator(".cq-subtitle").filter(has_text=profile["full_name"]).first).to_be_visible()
         assert not page.evaluate("document.documentElement.scrollWidth > innerWidth"), "Long employee name overflows"
         page.screenshot(path=str(output / "05-imported-profile.png"))

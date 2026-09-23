@@ -41,17 +41,18 @@ class CoreIntegrationTests(unittest.TestCase):
             with self.assertRaisesRegex(AdapterError, "Не найден core/api.py"):
                 CoreAdapter(DATA)
 
-    def test_real_timeout_reaches_ui_with_core_explanation(self):
+    def test_ui_render_uses_core_without_unmetered_legacy_ai(self):
         expected = api.get_employee_view(self.dataset, "E0001")
         with patch.dict(os.environ, {"CAREER_QUEST_AI_PROVIDER": "openai", "CAREER_QUEST_AI_MODEL": "synthetic-model", "OPENAI_API_KEY": "synthetic-test-token"}), \
-             patch.object(ai, "_bounded_request", side_effect=TimeoutError):
+             patch.object(ai, "_bounded_request", side_effect=TimeoutError) as provider:
             app = AppTest.from_file(str(ROOT / "app.py"), default_timeout=30).run()
         self.assertFalse(app.exception)
         self.assertFalse(app.error)
         view = app.session_state["views"][(0, "E0001")]
-        self.assertTrue(view["ai_status"].startswith("Fallback"))
+        provider.assert_not_called()
+        self.assertIn("по кнопке", view["ai_status"])
         rec = view["recommendations"][0]
-        self.assertTrue(rec["ai_fallback"])
+        self.assertFalse(rec["ai_fallback"])
         self.assertEqual(rec["reasons"], expected["recommendations"][0]["reasons"])
         self.assertEqual(rec["display_explanation"], rec["reasons"][0])
 

@@ -13,6 +13,7 @@ import streamlit as st
 from ui.components import STATUSES, e, empty_state, html, journey, number, page_heading, recommendation_content, skill_card, stat
 from ui.core_adapter import AdapterError, CoreAdapter
 from ui.development_map import render_development_map
+from ui.growth_views import render_profile, render_certificates, render_tracks, render_hr_profile, render_hr_requests
 
 ROOT = Path(__file__).resolve().parent
 DATA_DIR = Path(os.environ.get("CAREER_QUEST_DATA_DIR", str(ROOT / "case/case_1/career_quest_dataset")))
@@ -70,8 +71,21 @@ def render_employee(adapter, employee_id):
     st.caption(view.get("ai_status", "Детерминированный расчёт"))
     if not view.get("next_grade"):
         st.caption("Для текущей роли следующего грейда нет. Индивидуальную цель развития можно обсудить с руководителем.")
-    route, map_tab, skills_tab, history_tab = st.tabs(["Мой маршрут", "Карта развития", "Навыки и требования", "История участия"], key="employee_tab", on_change="rerun")
+    profile_tab, tracks_tab, portfolio_tab, route, map_tab, skills_tab, history_tab = st.tabs(
+        ["Профиль и опыт", "Треки и курсы", "Мои сертификаты", "Мой маршрут", "Карта развития", "Навыки и требования", "История участия"],
+        default="Мой маршрут" if adapter.is_demo else "Профиль и опыт", key="employee_tab", on_change="rerun")
+    if not adapter.is_demo:
+        with profile_tab:
+            if profile_tab.open:
+                render_profile(adapter, st.session_state.dataset, employee_id)
+        with tracks_tab:
+            if tracks_tab.open:
+                render_tracks(adapter, st.session_state.dataset, employee_id)
+        with portfolio_tab:
+            if portfolio_tab.open:
+                render_certificates(adapter, st.session_state.dataset, employee_id)
     with route:
+        st.caption("Учебная симуляция стартового кита. Для зачёта внешнего обучения и XP отправьте сертификат HR.")
         recs = view["recommendations"]
         left, right = st.columns([1.95, 1], gap="large")
         with left:
@@ -128,6 +142,21 @@ def render_employee(adapter, employee_id):
 
 def render_hr(adapter, employees):
     page_heading("Развитие команды", "Где нужна поддержка, какие навыки развивать и как сотрудники участвуют в обучении.", "HR · Обзор развития")
+    if adapter.is_demo:
+        render_hr_overview(adapter, employees)
+        return
+    approvals, profile_tab, overview = st.tabs(["Заявки и решения", "Оценка сотрудника", "Обзор команды"], key="hr_tab", on_change="rerun")
+    with approvals:
+        if approvals.open:
+            render_hr_requests(adapter, st.session_state.dataset, employees)
+    with profile_tab:
+        if profile_tab.open and st.session_state.get("employee_id"):
+            render_hr_profile(adapter, st.session_state.dataset, st.session_state.employee_id)
+    with overview:
+        render_hr_overview(adapter, employees)
+
+
+def render_hr_overview(adapter, employees):
     key = (st.session_state.revision, "__hr__")
     if key not in st.session_state.views:
         with st.spinner("Собираем обзор команды…"):
@@ -226,6 +255,9 @@ def main():
     html("<style>" + (ROOT / "styles/main.css").read_text(encoding="utf-8") + "</style>")
     try:
         adapter = CoreAdapter(DATA_DIR)
+        # Paid calls are explicit and metered by the growth service; no legacy
+        # provider calls on rerenders, employee selection or HR aggregation.
+        adapter.managed_ai = True
         if "dataset" not in st.session_state or st.session_state.get("backend_name") != adapter.backend_name:
             st.session_state.dataset = adapter.load_dataset()
             st.session_state.backend_name = adapter.backend_name

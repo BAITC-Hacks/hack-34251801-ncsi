@@ -20,7 +20,7 @@ CONTRAST = """el => {
     for (const node of ancestors.reverse()) {
         background = blend(rgba(getComputedStyle(node).backgroundColor), background);
     }
-    const color = getComputedStyle(el).color;
+    const color = el instanceof SVGTextElement ? getComputedStyle(el).fill : getComputedStyle(el).color;
     const foreground = blend(rgba(color), background);
     const luminance = rgb => rgb.map(v => {
         v /= 255;
@@ -32,7 +32,7 @@ CONTRAST = """el => {
 }"""
 
 TEXT = ", ".join([
-    ".cq-brand strong", ".cq-brand small", ".cq-person strong", ".cq-person p", ".cq-pill",
+    ".cq-brand strong", ".cq-brand small", ".cq-person strong", ".cq-person p", ".cq-pill", ".cq-xp-value", ".cq-radar text",
     '[data-testid="stWidgetLabel"] p',
     '[data-testid="stRadioOption"] [data-testid="stMarkdownContainer"] p',
     '[data-testid="stCaptionContainer"] p', '[data-testid="stTab"]',
@@ -84,6 +84,9 @@ def main():
             page.evaluate("document.fonts.ready")
             label = f"{scheme}-{saved or 'system'}"
             minimum = readable_text(page)
+            page.screenshot(path=str(output / f"{label}-growth.png"))
+            page.get_by_role("tab", name="Мой маршрут", exact=True).click()
+            minimum = min(minimum, readable_text(page))
             expect(page.get_by_role("button", name="Завершить активность", exact=True)).to_be_in_viewport(ratio=1)
             page.screenshot(path=str(output / f"{label}-employee.png"))
             for mode, heading in [("HR", "Развитие команды"), ("Импорт данных", "Добавьте данные для проверки")]:

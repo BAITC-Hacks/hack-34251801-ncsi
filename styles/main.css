@@ -105,6 +105,10 @@ button[data-baseweb="tab"][aria-selected="true"] { color:var(--cq-green); }
 .cq-bar { height:7px; background:#edf2ed; border-radius:4px; }
 .cq-bar i { display:block; height:100%; background:#439a76; border-radius:4px; }
 .cq-footer { margin-top:20px; padding-top:12px; border-top:1px solid var(--cq-line); color:var(--cq-muted); font-size:9px; display:flex; justify-content:space-between; gap:12px; }
+.cq-radar { display:block; width:100%; max-width:470px; margin:0 auto; }
+.cq-xp-value { font-size:44px; font-weight:800; color:var(--cq-green); margin:8px 0 14px; letter-spacing:-1px; }
+.cq-xp-value span { font-size:18px; font-weight:650; }
+[data-testid="stMetricValue"], [data-testid="stMetricLabel"], [data-testid="stProgress"] { color:var(--cq-ink); }
 .cq-map-shell { background:#fff; border:1px solid #dfe8e1; border-radius:16px; padding:10px 8px; overflow-x:auto; }
 .cq-map-svg { display:block; width:100%; min-width:760px; height:auto; font-family:Manrope,"Segoe UI",sans-serif; }
 .cq-map-column { font-size:11px; letter-spacing:1px; font-weight:700; fill:#56675e; }

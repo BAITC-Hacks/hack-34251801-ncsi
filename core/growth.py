@@ -108,8 +108,18 @@ class GrowthStore:
 
 
 class GrowthService:
+    traits = TRAITS
+
     def __init__(self, store=None):
         self.store = store or GrowthStore()
+
+    @staticmethod
+    def baseline_view(dataset, employee_id):
+        return engine.get_employee_view(dataset, employee_id, use_ai=False)
+
+    def budget(self):
+        from .growth_ai import GrowthAdvisor
+        return GrowthAdvisor(self.store).budget()
 
     @staticmethod
     def _hr(actor):

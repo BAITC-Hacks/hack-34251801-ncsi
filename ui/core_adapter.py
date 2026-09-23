@@ -108,16 +108,26 @@ class CoreAdapter:
     def load_dataset(self):
         return self.api.load_dataset(str(self.data_dir))
 
+    @property
+    def growth(self):
+        if not hasattr(self, "_growth"):
+            from core.growth import GrowthService
+            self._growth = GrowthService()
+        return self._growth
+
     def list_employees(self, dataset):
         return [dict(row, full_name=row.get("full_name", row.get("name", row["employee_id"])))
                 for row in self.api.list_employees(dataset)]
 
     def get_employee_view(self, dataset, employee_id):
-        view = deepcopy(self.api.get_employee_view(dataset, employee_id))
+        managed = getattr(self, "managed_ai", False) and self.api.__name__ == "core.api"
+        view = deepcopy(self.growth.baseline_view(dataset, employee_id) if managed else self.api.get_employee_view(dataset, employee_id))
         employee = view["employee"]
         employee["full_name"] = employee.get("full_name", employee.get("name", employee_id))
         view["ai_status"] = "Предпросмотр UI" if self.is_demo else "Детерминированный расчёт"
-        if not self.is_demo and self.api.__name__ == "core.api":
+        if managed:
+            view["ai_status"] = "Расчёт core · AI-треки и поиск запускаются отдельно по кнопке"
+        elif not self.is_demo and self.api.__name__ == "core.api":
             try:
                 view["ai_status"] = importlib.import_module("core.ai").LAST_STATUS.get()
             except (ImportError, AttributeError):
