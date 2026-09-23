@@ -151,7 +151,7 @@ def render_account(user, service=None):
           <h1>Добро пожаловать,<br>{escape(user['name'])}.</h1>
           <p>Вы вошли в Career Quest.</p>
           <div class="auth-identity"><span>{escape(user['email'])}</span><b>{ROLES[user['role']]}</b></div></div>''')
-        st.info("Аккаунт готов. Подключение рабочего пространства к этой странице выполняется отдельно.")
+        st.info('Аккаунт готов. Для рабочих разделов запустите основное приложение: python -m streamlit run app.py.')
         if st.button("Выйти из аккаунта", key="cq_auth_logout", width="stretch"):
             try:
                 (service or AuthService()).logout(st.session_state.get(TOKEN_KEY))

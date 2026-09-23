@@ -4,6 +4,7 @@ import math
 from datetime import date
 
 import streamlit as st
+from auth.service import AuthError
 
 from .components import e, html
 
@@ -51,7 +52,12 @@ def radar(traits, labels):
 
 @st.fragment(run_every=60)
 def render_profile(adapter, dataset, employee_id):
-    state = adapter.growth.snapshot(dataset, employee_id)
+    try:
+        state = adapter.growth.snapshot(dataset, employee_id)
+    except (AuthError, PermissionError):
+        # A timer fragment runs without main(); return expired sessions to the
+        # normal login gate instead of leaving a traceback on the profile page.
+        st.rerun(scope='app')
     left, right = st.columns([1, 1.1], gap='large')
     with left, st.container(border=True):
         html('<span class="cq-tag">Паспорт развития</span>')
@@ -141,7 +147,10 @@ def open_completion(employee_id, request_id):
 
 @st.fragment(run_every=2)
 def research_progress(adapter, dataset, employee_id):
-    result = adapter.growth.development_plan(dataset, employee_id)
+    try:
+        result = adapter.growth.development_plan(dataset, employee_id)
+    except (AuthError, PermissionError):
+        st.rerun(scope='app')
     if result['status'] == 'running':
         st.info('Подбор выполняется в фоне. Можно переключать разделы и роли.')
     else:

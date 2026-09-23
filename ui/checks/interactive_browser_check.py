@@ -77,7 +77,7 @@ def main():
             seeded = service.recommend(data, 'E0001', True)
             assert seeded['status'] == 'generated', seeded
         used_before = service.budget()['used']
-        env = dict(os.environ, CAREER_QUEST_GROWTH_DB=str(store.path), OPENAI_API_KEY='', NVIDIA_API_KEY='',
+        env = dict(os.environ, CAREER_QUEST_DEMO_MODE='1', CAREER_QUEST_GROWTH_DB=str(store.path), OPENAI_API_KEY='', NVIDIA_API_KEY='',
                    CAREER_QUEST_AI_PROVIDER='none', CAREER_QUEST_GROWTH_BUDGET_USD='5', CAREER_QUEST_GROWTH_REQUEST_USD='.1')
         flags = subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
         with (output / 'server.log').open('w', encoding='utf-8') as log:

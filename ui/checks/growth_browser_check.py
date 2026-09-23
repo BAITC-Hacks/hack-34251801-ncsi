@@ -39,7 +39,7 @@ def main():
     store = GrowthStore(Path(tempfile.mkdtemp(prefix='cq-growth-qa-db-')) / 'growth.sqlite3')
     service = GrowthService(store)
     data = api.load_dataset(str(ROOT / 'case/case_1/career_quest_dataset'))
-    env = dict(os.environ, CAREER_QUEST_GROWTH_DB=str(store.path), OPENAI_API_KEY='',
+    env = dict(os.environ, CAREER_QUEST_DEMO_MODE='1', CAREER_QUEST_DATA_HOME=str(store.path.parent), CAREER_QUEST_GROWTH_DB=str(store.path), OPENAI_API_KEY='',
                CAREER_QUEST_AI_PROVIDER='none', CAREER_QUEST_GROWTH_BUDGET_USD='5', CAREER_QUEST_GROWTH_REQUEST_USD='.1')
     flags = subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0
     with (output / 'server.log').open('w', encoding='utf-8') as log:
