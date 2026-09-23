@@ -212,8 +212,17 @@ def track_details(track, plan):
     st.caption('Будущие навыки — предложение. Прирост уровня определяет HR после обучения.')
 
 
-def alternatives(track_id):
-    st.session_state['growth-track-filter'] = track_id
+def set_direction_filter(employee_id, track_id):
+    st.session_state[f'_growth-direction-{employee_id}'] = track_id
+    st.session_state[f'growth-direction-{employee_id}'] = track_id
+
+
+def remember_direction_filter(employee_id):
+    st.session_state[f'_growth-direction-{employee_id}'] = st.session_state[f'growth-direction-{employee_id}']
+
+
+def alternatives(employee_id, track_id):
+    set_direction_filter(employee_id, track_id)
     change_tab('Треки и курсы')
 
 
@@ -232,12 +241,13 @@ def course_card(adapter, dataset, employee_id, plan, course, track_id, prefix='c
             st.button('Хочу этот курс', key=f'{prefix}-want-{cid}', type='primary', on_click=action,
                       args=(lambda: adapter.growth.choose_course(dataset, employee_id, plan['plan_id'], cid),
                             'Курс добавлен в маршрут. Заявка отправлена HR.'))
-        a, b = st.columns(2)
         hidden = course.get('hidden', False)
-        a.button('Восстановить' if hidden else 'Не подходит', key=f'{prefix}-hide-{cid}', on_click=action,
+        st.button('Восстановить' if hidden else 'Не подходит', key=f'{prefix}-hide-{cid}', on_click=action,
                  args=(lambda: adapter.growth.hide_course(dataset, employee_id, plan['plan_id'], cid, hidden=not hidden),
                        'Предложение восстановлено.' if hidden else 'Предложение скрыто. XP не изменился.'))
-        b.button('Другие варианты', key=f'{prefix}-other-{cid}', on_click=alternatives, args=(track_id,))
+        if prefix.startswith('map-'):
+            st.button('Сравнить курсы направления', key=f'{prefix}-other-{cid}',
+                      on_click=alternatives, args=(employee_id, track_id), width='stretch')
 
 
 def custom_course_form(adapter, dataset, employee_id):
@@ -263,22 +273,52 @@ def hidden_courses(adapter, dataset, employee_id, plan):
 
 
 def render_tracks(adapter, dataset, employee_id):
-    st.subheader('В какую сторону расти')
+    st.subheader('Направления и варианты обучения')
     plan = adapter.growth.development_plan(dataset, employee_id)
     plan_header(adapter, dataset, employee_id, plan)
-    selected = st.session_state.get('growth-track-filter')
     tracks = plan['tracks']
-    if selected and any(t['id'] == selected for t in tracks):
-        st.caption('Альтернативы выбранного направления')
-        st.button('Показать все направления', on_click=lambda: st.session_state.pop('growth-track-filter', None))
-        tracks = [t for t in tracks if t['id'] == selected]
-    for track in tracks:
-        track_details(track, plan)
-        visible = [c for c in track['courses'] if not c.get('hidden')]
-        if not visible:
-            st.caption('Подтверждённых видимых вариантов нет. Можно восстановить предложение или добавить свой курс.')
-        for course in visible:
-            course_card(adapter, dataset, employee_id, plan, course, track['id'])
+    if tracks:
+        by_id = {track['id']: track for track in tracks}
+        filter_key = f'growth-direction-{employee_id}'
+        saved = st.session_state.get(f'_growth-direction-{employee_id}', '__all__')
+        if st.session_state.get(filter_key, saved) not in ['__all__', *by_id]:
+            set_direction_filter(employee_id, '__all__')
+        elif filter_key not in st.session_state:
+            st.session_state[filter_key] = saved
+        with st.container(border=True, key='cq-direction-filter'):
+            st.selectbox('Фильтр по направлению', ['__all__', *by_id], key=filter_key,
+                         format_func=lambda value: 'Все направления' if value == '__all__' else by_id[value]['title'],
+                         on_change=remember_direction_filter, args=(employee_id,))
+            selected = st.session_state[filter_key]
+            shown = tracks if selected == '__all__' else [by_id[selected]]
+            count = sum(not c.get('hidden') for t in shown for c in t['courses'])
+            html(f'<div class="cq-filter-result"><b>{"Все направления" if selected == "__all__" else "Фильтр включён"}</b>'
+                 f'<span>Направлений: {len(shown)} из {len(tracks)} · Вариантов обучения: {count}</span></div>')
+            if selected != '__all__':
+                st.button('Сбросить фильтр', on_click=set_direction_filter, args=(employee_id, '__all__'))
+        for track in shown:
+            number = tracks.index(track) + 1
+            visible = [c for c in track['courses'] if not c.get('hidden')]
+            kind = 'Углубление специализации' if track.get('kind') == 'specialization' else 'Новая ветка развития'
+            with st.container(border=True, key=f'cq-direction-{number}'):
+                html(f'<div class="cq-direction-heading"><span class="cq-direction-number">{number:02d}</span>'
+                     f'<div><small>{e(kind)}</small><h3>{e(track["title"])}</h3></div>'
+                     f'<span class="cq-direction-count">Вариантов: {len(visible)}</span></div>')
+                st.write(track['explanation'])
+                html('<div class="cq-direction-skills">' + ''.join(f'<span>{e(skill)}</span>' for skill in track['next_skills']) + '</div>')
+                with st.expander('Почему это направление подходит'):
+                    refs = references(plan)
+                    st.write('Подтверждённые основания: ' + ' · '.join(refs.get(r, r) for r in track['basis_refs']))
+                    st.caption('Будущие навыки — предложение. Прирост уровня определяет HR после обучения.')
+                st.divider()
+                st.markdown('**Сравните курсы и выберите один или несколько**')
+                if not visible:
+                    st.caption('Варианты скрыты или подтверждённых ссылок нет. Восстановите предложение ниже или добавьте свой курс.')
+                for start in range(0, len(visible), 2):
+                    columns = st.columns(2)
+                    for column, course in zip(columns, visible[start:start + 2]):
+                        with column:
+                            course_card(adapter, dataset, employee_id, plan, course, track['id'])
     hidden_courses(adapter, dataset, employee_id, plan)
     custom_course_form(adapter, dataset, employee_id)
     st.button('Перейти в мой маршрут', on_click=change_tab, args=('Мой маршрут',))
