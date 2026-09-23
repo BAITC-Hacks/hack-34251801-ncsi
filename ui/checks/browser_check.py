@@ -69,6 +69,10 @@ def main():
         page.get_by_text("HR", exact=True).click()
         expect(page.get_by_role("heading", name="Развитие команды", exact=True)).to_be_visible()
         expect(page.get_by_role("heading", name="Участие по активностям", exact=True)).to_be_visible()
+        caption = page.locator('.st-key-hr_support [data-testid="stCaptionContainer"]').bounding_box()
+        table = page.locator('.st-key-hr_support [data-testid="stDataFrame"]').bounding_box()
+        assert caption["y"] + caption["height"] <= table["y"], "HR table overlaps its caption"
+        page.locator('[data-testid="stMain"]').evaluate("el => el.scrollTo(0, 0)")
         page.screenshot(path=str(output / "03-hr-1366.png"))
         results.append("HR gaps, employees needing support and event participation visible")
         page.get_by_text("Импорт данных", exact=True).click()
