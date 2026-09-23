@@ -9,23 +9,29 @@ from copy import deepcopy
 from pathlib import Path
 
 import streamlit as st
-from dotenv import load_dotenv
+from storage.config import configure_storage
 
 from auth.demo_session import end_demo_session, get_demo_identity
 from auth.demo_ui import render_demo_login
+from auth.service import AuthService
+from auth.ui import TOKEN_KEY, render_auth, setup_page
+from auth.integration_ui import render_first_admin, render_users
 from ui.components import STATUSES, e, empty_state, html, journey, number, page_heading, recommendation_content, skill_card, stat
 from ui.core_adapter import AdapterError, CoreAdapter
+from ui.persistent_adapter import PersistentAdapter
 from ui.development_map import render_development_map
 from ui.growth_views import render_profile, render_certificates, render_tracks, render_hr_profile, render_hr_requests
 
 ROOT = Path(__file__).resolve().parent
-load_dotenv(ROOT / '.env', override=False, interpolate=False)
+STORAGE_PATHS = configure_storage()
 DATA_DIR = Path(os.environ.get("CAREER_QUEST_DATA_DIR", str(ROOT / "case/case_1/career_quest_dataset")))
+if not DATA_DIR.is_absolute():
+    DATA_DIR = ROOT / DATA_DIR
 LOGGER = logging.getLogger("career_quest.ui")
 
 
 def show_error(exc, action):
-    if isinstance(exc, (ValueError, FileNotFoundError)):
+    if isinstance(exc, (ValueError, FileNotFoundError, PermissionError)):
         st.error(str(exc))
     else:
         LOGGER.error("%s failed: %s", action, type(exc).__name__)
@@ -47,7 +53,7 @@ def finish_activity(adapter, employee_id, rec, current_view):
     changes = [f'{s["name"]}: {number(before.get(s["skill_id"], 0))} → {number(s["current"])}'
                for s in view["skills"] if s["current"] > before.get(s["skill_id"], 0)]
     st.session_state.dataset = updated
-    st.session_state.revision += 1
+    st.session_state.revision = getattr(adapter, 'dataset_revision', None) or (st.session_state.revision + 1)
     st.session_state.views = {(st.session_state.revision, employee_id): view}
     completions = st.session_state.setdefault("map_completions", {})
     completions[employee_id] = {"event_id": rec["event_id"], "before": before,
@@ -228,12 +234,14 @@ def render_import(adapter, employees):
                     imported_employees = adapter.list_employees(updated)
                 new_ids = [emp["employee_id"] for emp in imported_employees if emp["employee_id"] not in before_ids]
                 st.session_state.dataset = updated
-                st.session_state.revision += 1
+                st.session_state.revision = getattr(adapter, 'dataset_revision', None) or (st.session_state.revision + 1)
                 st.session_state.views = {}
                 st.session_state.map_completions = {}
                 if new_ids:
                     st.session_state.pending_employee = new_ids[0]
-                st.session_state.flash = f"Импорт завершён. Новых сотрудников: {len(new_ids)}. История учтена движком. Выйдите и войдите как сотрудник, выбрав новый профиль."
+                next_step = ('Назначьте новый профиль аккаунту в разделе «Пользователи».' if isinstance(adapter, PersistentAdapter)
+                             else 'Выйдите и войдите как сотрудник, выбрав новый профиль.')
+                st.session_state.flash = f"Импорт завершён. Новых сотрудников: {len(new_ids)}. История учтена движком. {next_step}"
                 st.rerun()
             except Exception as exc:
                 show_error(exc, "импортировать данные")
@@ -251,7 +259,9 @@ def render_import(adapter, employees):
             source["full_name"] = "Demo Jury Profile"
             st.download_button("Скачать пример профиля", json.dumps({"employees": [source]}, ensure_ascii=False, indent=2),
                                file_name="jury_employees.example.json", mime="application/json", width="stretch")
-    st.info("Изменения хранятся в сессии демонстрации. Переключение экранов сохраняет прогресс; новый сеанс браузера начинает с исходного датасета.")
+    st.info('Профили и история сохранены в локальной базе. Они останутся после выхода и перезапуска приложения.'
+            if isinstance(adapter, PersistentAdapter) else
+            'Изменения хранятся в сессии демонстрации. Новый сеанс браузера начинает с исходного датасета.')
 
 
 def render_admin_status(adapter, employees):
@@ -265,10 +275,10 @@ def render_admin_status(adapter, employees):
         stat("Активностей", len(adapter.events), "Общий каталог обучения")
     st.subheader("Подключения")
     st.dataframe([
-        {"Компонент": "Вход", "Состояние": "Демонстрация ролей · без паролей и базы аккаунтов"},
+        {"Компонент": "Вход", "Состояние": 'Аккаунты и роли в SQLite · проверка сессии и доступа' if isinstance(adapter, PersistentAdapter) else 'Демонстрация ролей · без паролей и базы аккаунтов'},
         {"Компонент": "Движок", "Состояние": "Предпросмотр" if adapter.is_demo else "core/api.py · подключён"},
         {"Компонент": "AI-поиск курсов", "Состояние": "Ключ настроен; запуск по кнопке" if os.environ.get("OPENAI_API_KEY") else "Ключ не задан; доступен маршрут по правилам"},
-        {"Компонент": "Профили и история", "Состояние": "Стартовый кит и изменения текущей сессии"},
+        {"Компонент": "Профили и история", "Состояние": 'SQLite · сохраняются после перезапуска' if isinstance(adapter, PersistentAdapter) else 'Стартовый кит и изменения текущей сессии'},
         {"Компонент": "Сертификаты и решения HR", "Состояние": "Локальное хранилище модуля развития"},
     ], hide_index=True, width="stretch")
     if not adapter.is_demo:
@@ -278,17 +288,53 @@ def render_admin_status(adapter, employees):
         left, right = st.columns(2)
         left.metric("Учтено / зарезервировано", f"{budget['used']:.3f} USD")
         right.metric("Лимит", f"{budget['limit']:.2f} USD")
-    st.info("Это проверка интерфейса. Роль выбирается свободно; проверка аккаунта и управление правами здесь не включены.")
+    if isinstance(adapter, PersistentAdapter):
+        st.info('Это локальная база этого экземпляра приложения. Другой человек при запуске своей копии создаёт собственную базу.')
+        with st.expander('Расположение файлов базы'):
+            for label, path in [('Аккаунты', STORAGE_PATHS.auth_db), ('Профили и история', STORAGE_PATHS.dataset_db), ('HR и обучение', STORAGE_PATHS.growth_db)]:
+                st.code(f'{label}: {path}', language=None)
+    else:
+        st.info('Это проверка интерфейса. Роль выбирается свободно; проверка аккаунта и управление правами здесь не включены.')
 
 
 def main():
     st.set_page_config(page_title="Career Quest · Halyk", page_icon="🌿", layout="wide", initial_sidebar_state="expanded")
+    demo_mode = os.environ.get('CAREER_QUEST_DEMO_MODE') == '1'
+    service, identity = None, None
+    if not demo_mode:
+        try:
+            service = AuthService()
+            if not service.has_admin():
+                setup_page()
+                render_first_admin(service)
+                st.stop()
+            token = st.session_state.get(TOKEN_KEY)
+            identity = service.current_user(token) if token else None
+            if identity is None:
+                setup_page()
+                render_auth(service)
+                st.stop()
+        except (ValueError, OSError) as exc:
+            show_error(exc, 'открыть базу аккаунтов')
+            st.stop()
     try:
-        adapter = CoreAdapter(DATA_DIR)
+        adapter = CoreAdapter(DATA_DIR) if demo_mode else PersistentAdapter(DATA_DIR, service, st.session_state[TOKEN_KEY])
         # Paid calls are explicit and metered by the growth service; no legacy
         # provider calls on rerenders, employee selection or HR aggregation.
         adapter.managed_ai = True
-        if "dataset" not in st.session_state or st.session_state.get("backend_name") != adapter.backend_name:
+        if not demo_mode:
+            dataset = adapter.load_dataset()
+            context = (identity['user_id'], identity['role'], identity.get('employee_id'))
+            if (st.session_state.get('revision') != adapter.dataset_revision
+                    or st.session_state.get('cq_account_context') != context):
+                st.session_state.views = {}
+                st.session_state.map_completions = {}
+            st.session_state.dataset = dataset
+            st.session_state.revision = adapter.dataset_revision
+            st.session_state.cq_account_context = context
+            st.session_state.backend_name = adapter.backend_name
+            st.session_state.setdefault('views', {})
+        elif "dataset" not in st.session_state or st.session_state.get("backend_name") != adapter.backend_name:
             st.session_state.dataset = adapter.load_dataset()
             st.session_state.backend_name = adapter.backend_name
             st.session_state.revision = 0
@@ -298,13 +344,12 @@ def main():
         page_heading("Не удалось открыть данные", "Проверьте путь к стартовому киту и готовность core/api.py.")
         show_error(exc, "загрузить датасет")
         st.stop()
-    identity = get_demo_identity(employees)
-    if identity is None:
-        render_demo_login(employees)
-        st.stop()
+    if demo_mode:
+        identity = get_demo_identity(employees)
+        if identity is None:
+            render_demo_login(employees)
+            st.stop()
 
-    # The demo gate only chooses a screen. Keep the real dataset and engine,
-    # including the existing HR workflow and explicitly metered AI requests.
     html("<style>" + (ROOT / "styles/main.css").read_text(encoding="utf-8") + "</style>")
     role = identity["role"]
     role_label = {"employee": "Сотрудник", "hr": "HR", "admin": "Администратор"}[role]
@@ -314,9 +359,13 @@ def main():
     with st.sidebar:
         html('<div class="cq-brand"><div class="cq-mark">cq</div><div><strong>Career Quest</strong><small>HALYK · РАЗВИТИЕ</small></div></div><div class="cq-rule"></div>')
         st.subheader(role_label)
-        st.caption("Деморежим · без паролей. Выбор роли не является разграничением доступа.")
-        if st.button("Выйти / сменить роль", key="cq_demo_logout", width="stretch"):
-            end_demo_session()
+        st.caption('Деморежим · без паролей. Выбор роли не является разграничением доступа.' if demo_mode else identity['email'])
+        if st.button('Выйти / сменить роль' if demo_mode else 'Выйти из аккаунта', key='cq_demo_logout' if demo_mode else 'cq_auth_logout', width='stretch'):
+            if demo_mode:
+                end_demo_session()
+            else:
+                service.logout(st.session_state.get(TOKEN_KEY))
+                st.session_state.clear()
             st.rerun()
         html('<div class="cq-rule"></div>')
         ids = list(choices)
@@ -329,7 +378,8 @@ def main():
             else:
                 st.warning("Нет сотрудников. Для загрузки профилей войдите как администратор.")
         elif role == "admin":
-            admin_page = st.radio("Раздел администратора", ["Импорт данных", "Состояние приложения"], key="admin_page")
+            sections = ['Импорт данных', 'Состояние приложения'] if demo_mode else ['Пользователи', 'Импорт данных', 'Состояние приложения']
+            admin_page = st.radio('Раздел администратора', sections, key='admin_page')
         if employee_id in choices:
             person = choices[employee_id]
             initials = "".join(part[0] for part in person.get("full_name", "CQ").split()[:2])
@@ -343,16 +393,19 @@ def main():
         st.success(st.session_state.pop("flash"))
     try:
         if role == "admin":
-            if admin_page == "Состояние приложения":
+            if admin_page == 'Пользователи' and not demo_mode:
+                render_users(service, st.session_state[TOKEN_KEY], employees)
+            elif admin_page == "Состояние приложения":
                 render_admin_status(adapter, employees)
             else:
                 render_import(adapter, employees)
         elif role == "hr":
             render_hr(adapter, employees)
-        elif role == "employee" and employee_id:
+        elif role == "employee" and employee_id in choices:
             render_employee(adapter, employee_id)
         else:
-            page_heading("Начните с профиля", "Выйдите и войдите как администратор, чтобы добавить сотрудников.")
+            page_heading('Аккаунт готов', 'Администратор должен связать ваш аккаунт с профилем сотрудника. После назначения войдите заново.')
+            st.info('Пока профиль не назначен, персональные данные и действия недоступны.')
     except Exception as exc:
         show_error(exc, "построить представление")
     html('<div class="cq-footer"><span>Career Quest · HackAlem AI · 2026</span><span>Развитие — совместное решение сотрудника и руководителя</span></div>')

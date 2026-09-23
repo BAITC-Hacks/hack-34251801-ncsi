@@ -23,7 +23,7 @@ import unicodedata
 import uuid
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Iterator
+from typing import Iterable, Iterator
 
 ROLES = frozenset({"employee", "hr", "admin"})
 PASSWORD_MIN_LENGTH = 15
@@ -111,6 +111,7 @@ def _safe_user(row: sqlite3.Row) -> dict:
     return {
         "user_id": row["user_id"], "name": row["name"], "email": row["email"],
         "role": row["role"], "active": bool(row["active"]),
+        "employee_id": row["employee_id"],
     }
 
 
@@ -145,6 +146,7 @@ class AuthService:
                         password_version INTEGER NOT NULL DEFAULT 1,
                         role TEXT NOT NULL CHECK (role IN ('employee', 'hr', 'admin')),
                         active INTEGER NOT NULL DEFAULT 1 CHECK (active IN (0, 1)),
+                        employee_id TEXT,
                         created_at REAL NOT NULL
                     );
                     CREATE TABLE IF NOT EXISTS auth_sessions (
@@ -162,6 +164,17 @@ class AuthService:
                         locked_until REAL NOT NULL DEFAULT 0
                     );
                 """)
+                # Migrate existing installations atomically; concurrent server
+                # sessions must not both attempt to add the same column.
+                conn.execute("BEGIN IMMEDIATE")
+                columns = {row["name"] for row in conn.execute("PRAGMA table_info(auth_users)")}
+                if "employee_id" not in columns:
+                    conn.execute("ALTER TABLE auth_users ADD COLUMN employee_id TEXT")
+                conn.execute(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS auth_users_employee "
+                    "ON auth_users(employee_id) WHERE employee_id IS NOT NULL"
+                )
+                conn.commit()
             # Restrict the file on POSIX. Windows deployment uses directory ACLs.
             if os.name != "nt":
                 self.db_path.chmod(0o600)
@@ -193,8 +206,13 @@ class AuthService:
         return self._create_user(name, email, password, password_confirmation, "employee")
 
     def create_admin(self, name: str, email: str, password: str, password_confirmation: str) -> dict:
-        """Trusted server CLI only: create the first admin; refuse a second bootstrap."""
+        """First-run provisioning only: create one admin, refusing later bootstrap."""
         return self._create_user(name, email, password, password_confirmation, "admin", first_admin=True)
+
+    def has_admin(self) -> bool:
+        """Match the bootstrap guard, including an existing inactive admin."""
+        with self._connection() as conn:
+            return conn.execute("SELECT 1 FROM auth_users WHERE role='admin' LIMIT 1").fetchone() is not None
 
     def _create_user(self, name: str, email: str, password: str, confirmation: str, role: str, first_admin: bool = False) -> dict:
         name, email = _validate_registration(name, email, password, confirmation)
@@ -204,7 +222,7 @@ class AuthService:
         with self._connection() as conn:
             conn.execute("BEGIN IMMEDIATE")
             if first_admin and conn.execute("SELECT 1 FROM auth_users WHERE role='admin' LIMIT 1").fetchone():
-                raise AuthError("Администратор уже создан. Для изменения ролей используйте команду set-role на сервере.")
+                raise AuthError("Администратор уже создан. Войдите в его аккаунт для управления пользователями.")
             try:
                 conn.execute(
                     "INSERT INTO auth_users(user_id,name,email,password_salt,password_hash,role,created_at) VALUES(?,?,?,?,?,?,?)",
@@ -313,6 +331,71 @@ class AuthService:
         if digest is not None:
             with self._connection() as conn:
                 conn.execute("DELETE FROM auth_sessions WHERE token_hash=?", (digest,))
+
+    @staticmethod
+    def _require_admin(conn: sqlite3.Connection, token: str, now: float) -> None:
+        """Authorize inside the caller's transaction, never from a cached user."""
+        digest = _token_digest(token)
+        row = conn.execute(
+            "SELECT u.role, u.active FROM auth_sessions s "
+            "JOIN auth_users u ON s.user_id=u.user_id "
+            "WHERE s.token_hash=? AND s.expires_at>? AND s.last_seen>?",
+            (digest, now, now - SESSION_IDLE_TIMEOUT),
+        ).fetchone() if digest is not None else None
+        if row is None or not row["active"] or row["role"] != "admin":
+            raise AuthError("Для управления аккаунтами войдите как администратор.")
+        conn.execute("UPDATE auth_sessions SET last_seen=? WHERE token_hash=?", (now, digest))
+
+    def list_users(self, token: str) -> list[dict]:
+        """Return account metadata to a currently authenticated administrator."""
+        with self._connection() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            self._require_admin(conn, token, time.time())
+            users = [_safe_user(row) for row in conn.execute("SELECT * FROM auth_users ORDER BY email")]
+            conn.commit()
+        return users
+
+    def configure_user(
+        self, token: str, user_id: str, role: str, employee_id: str | None,
+        valid_employee_ids: Iterable[str],
+    ) -> dict:
+        """Set a role/profile using the server's current employee catalogue.
+
+        Profile IDs must come from the loaded dataset, never a browser-supplied
+        catalogue. One profile belongs to at most one account. Changes revoke
+        every session of that account, including the caller's own session.
+        """
+        with self._connection() as conn:
+            conn.execute("BEGIN IMMEDIATE")
+            self._require_admin(conn, token, time.time())
+            if not isinstance(role, str) or role not in ROLES:
+                raise AuthError("Допустимые роли: employee, hr, admin.")
+            if employee_id is not None and (
+                not isinstance(employee_id, str) or not employee_id
+                or employee_id not in valid_employee_ids
+            ):
+                raise AuthError("Профиль сотрудника не найден в текущем наборе данных. Обновите список.")
+            if not isinstance(user_id, str):
+                raise AuthError("Аккаунт не найден. Обновите список пользователей.")
+            row = conn.execute("SELECT * FROM auth_users WHERE user_id=?", (user_id,)).fetchone()
+            if row is None:
+                raise AuthError("Аккаунт не найден. Обновите список пользователей.")
+            if row["role"] == "admin" and row["active"] and role != "admin":
+                admins = conn.execute("SELECT COUNT(*) FROM auth_users WHERE role='admin' AND active=1").fetchone()[0]
+                if admins <= 1:
+                    raise AuthError("Нельзя понизить роль последнего активного администратора.")
+            if row["role"] != role or row["employee_id"] != employee_id:
+                try:
+                    conn.execute(
+                        "UPDATE auth_users SET role=?,employee_id=? WHERE user_id=?",
+                        (role, employee_id, user_id),
+                    )
+                except sqlite3.IntegrityError:
+                    raise AuthError("Этот профиль уже привязан к другому аккаунту. Сначала снимите прежнюю привязку.") from None
+                conn.execute("DELETE FROM auth_sessions WHERE user_id=?", (user_id,))
+            updated = conn.execute("SELECT * FROM auth_users WHERE user_id=?", (user_id,)).fetchone()
+            conn.commit()
+        return _safe_user(updated)
 
     def assign_role(self, email: str, role: str) -> dict:
         """Trusted server CLI only; role changes revoke all sessions for that user."""

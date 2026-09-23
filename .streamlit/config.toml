@@ -11,3 +11,10 @@ font = "sans-serif"
 backgroundColor = "#ffffff"
 secondaryBackgroundColor = "#f5f8f4"
 textColor = "#182e27"
+
+# Default deployment is a local installation with its own SQLite files.
+[server]
+address = "127.0.0.1"
+
+[browser]
+gatherUsageStats = false

@@ -3,6 +3,9 @@
 import streamlit as st
 
 from auth.ui import render_account, render_auth, setup_page
+from storage.config import configure_storage
+
+configure_storage()
 
 st.set_page_config(page_title="Вход · Career Quest", page_icon="🌱", layout="wide")
 setup_page()

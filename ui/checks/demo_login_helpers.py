@@ -13,6 +13,7 @@ def isolate_demo_storage(test, growth_path=None):
     folder = Path(directory.name)
     auth_path = folder / "auth-must-not-exist" / "auth.sqlite3"
     environment = patch.dict(os.environ, {
+        "CAREER_QUEST_DEMO_MODE": "1",
         "CAREER_QUEST_AUTH_DB": str(auth_path),
         "CAREER_QUEST_GROWTH_DB": str(growth_path or folder / "growth.sqlite3"),
         "CAREER_QUEST_AI_PROVIDER": "none", "OPENAI_API_KEY": "", "NVIDIA_API_KEY": "",
