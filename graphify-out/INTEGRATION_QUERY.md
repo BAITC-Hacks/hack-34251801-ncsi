@@ -1,120 +1,35 @@
-# HR growth integration query
+# Authenticated interactive growth integration
 
-Question: How do HR approval, XP, persistent records and explicit AI research
-connect, and can viewing a profile trigger paid research?
+Current snapshot: authentication/storage merge, course-direction filtering and mandatory training assigned by HR.
 
-Expanded from actual graph vocabulary: `certificate`, `snapshot`, `recommend`,
-`budget`, `reservations`, `baseline`, `managed`.
+## Account and dataset boundary
 
-The CLI traversal in `integration_query_raw.txt` is budget-limited. The four
-critical paths below were also validated against every edge of the full graph.
+The default app authenticates persistent accounts. `PersistentAdapter.require` revalidates the session, stored role and employee binding. `AuthorizedGrowth` checks access and reads the latest persisted dataset before forwarding growth operations. `DatasetStore` keeps imports and legacy history across restarts. Optional free role selection is enabled only by `CAREER_QUEST_DEMO_MODE=1`.
 
-## Profile views use the deterministic baseline
+Sources: `app.py` / `main`; `auth/service.py` / `current_user`; `ui/persistent_adapter.py` / `require`, `AuthorizedGrowth._latest`; `storage/dataset.py` / `read`, `mutate`.
 
-```text
-app.employee_view
-  → CoreAdapter.get_employee_view
-  → GrowthService.baseline_view
-  → engine.get_employee_view(use_ai=False)
-```
+## Shared plan, choices and research
 
-`app.main` sets `adapter.managed_ai=True`. The adapter's managed branch uses the
-growth service's deterministic baseline. The graph also contains the preserved
-legacy `core.api → core.engine → core.ai.refine` source path; that possible call
-does not mean it executes during managed UI navigation.
+Map, course list and route use `development_plan`; authenticated calls cross `AuthorizedGrowth` and then the shared `GrowthService`. Map comparison selects an employee-specific direction filter. Numbered direction blocks show course alternatives and reset to all directions. Choosing/hiding a course changes backend records, not skill levels. Choices and HR decisions survive AI refreshes.
 
-Sources: `app.py` / `main`, `employee_view`; `ui/core_adapter.py` /
-`CoreAdapter.get_employee_view / managed_ai branch`; `core/growth.py` /
-`GrowthService.baseline_view / engine.get_employee_view(use_ai=False)`.
+The map can start first/weekly background research; manual refresh is explicit. GPT-5 uses low reasoning and one hosted search. Reservations, errors and known charges persist. Unknown costs are retained. The 0.10 USD request admission estimate and 5 USD application limit are application controls; search has no numeric returned-token cap, so the estimate is not a provider hard-spending guarantee.
 
-## Research requires the explicit button
+Sources: `ui/growth_views.py` / `render_growth_map`, `render_tracks`, `render_route`, `set_direction_filter`; `core/growth.py` / `development_plan`, `choose_course`, `hide_course`, `start_research`; `core/growth_ai.py` / `read`, `_prepare`, `start`, `_execute`.
 
-```text
-ui.growth_views.render_tracks
-  → GrowthService.recommend
-  → GrowthAdvisor.recommend
-  → _bounded_http
-  → worker (thread callback)
-  → _http
-```
+## Mandatory courses assigned by HR
 
-The first call uses `generate=False`, returning a valid cached plan or a ready
-state. The research button passes `generate=True`. Missing configuration returns
-an unavailable state; it does not invent courses. Before network access the
-advisor checks the request bound, starts a SQLite transaction, checks shared
-spending and reserves the entire request cap in `ai_calls`.
+HR uses the same saved plan and budgeted search. Authenticated assignment passes through `AuthorizedGrowth.assign_course` or `assign_custom_course` to the corresponding `GrowthService` operation. It stores an approved mandatory request and explanation, restores hidden suggestions, and reuses existing course lifecycle records. Employees cannot cancel mandatory requests. Completion still requires certificate review before XP or skills change.
 
-The implemented caps are $5 per application database and $0.10 per request,
-with environment overrides permitted only downward. One web search and at most
-3,000 output tokens are requested; the caller waits at most 28 seconds. Usage
-is charged conservatively and unknown cost retains the reservation. These are
-implementation facts, not a claim about an OpenAI account's actual balance or
-an independent verification of current provider tariffs.
+Sources: `ui/growth_views.py` / `course_card`, `custom_course_form`; `ui/persistent_adapter.py` / `AuthorizedGrowth.assign_course`, `assign_custom_course`; `core/growth.py` / `_assign_course_request`, `cancel_training`.
 
-Source: `ui/growth_views.py` / `render_tracks`; `core/growth.py` /
-`GrowthService.recommend`; `core/growth_ai.py` / `GrowthAdvisor.recommend`,
-`limits`, `request_payload`, `_bounded_http`.
+## Interactive presentation and confirmed progress
 
-Returned course URLs must match a returned search source and an allowed provider
-domain. Portfolio fingerprints and a seven-day cache determine whether a plan
-can be reused; `request_training` rejects stale or mismatched plans. The graph
-does not establish live API availability: no external API was called here.
+Local Streamlit v2 returns selection and viewport state; it does not call a model or independently rank recommendations. JavaScript/Python links describe shared state, not cross-language function calls. Confirmed skills/certificates are facts; future skills remain proposals.
 
-Source: `core/growth_ai.py` / `validate_response`, `fingerprint`;
-`core/growth.py` / `GrowthService.request_training`.
+Route completion opens a certificate form. HR approval atomically records awards and training status. A later `snapshot` reads approved certificates to calculate XP and levels: persisted data flow, not a direct call from review to snapshot. Stable containers and callbacks avoid stale page trees; isolated browser checks exercise real interaction and role transitions.
 
-## HR approval changes the confirmed portfolio
+Sources: `ui/map_component.py`; `ui/map_frontend/map.js`; `ui/growth_views.py` / `certificate_form.submit.save`, `render_hr_requests.review`; `core/growth.py` / `review_certificate`, `snapshot`; `app.py` / `main`.
 
-```text
-render_hr_requests
-  → GrowthService.review_certificate
-  → certificates SQLite table
-  → GrowthService.snapshot
-```
+`VALIDATION.json` records current graph integrity and source hashes. `integration_query_raw.txt` lists selected current graph links. `BENCHMARK.md` retains a clearly marked earlier measurement. Graph generation made no external API requests; application live-search evidence is documented separately in README.
 
-Submission creates a pending certificate without skill awards or learning XP.
-An HR approval records selected 0–1 skill awards. `snapshot` applies approved
-awards, caps levels at 5, and computes 100 learning XP per approved certificate
-plus 10 tenure XP per full day. The game level is `1 + xp // 1000`; it is separate
-from job grade. A reviewed certificate cannot be reviewed again, and course
-fingerprints prevent another credit for the same employee/course.
-
-Sources: `core/growth.py` / `submit_certificate`, `review_certificate`,
-`snapshot`; `README.md` / `Сценарий сотрудника и HR`.
-
-Training-request approval is a separate HR decision. It performs no purchase
-and adds neither completion nor XP. Profile, certificate, plan, request and
-spending tables are represented from SQL declarations only. Runtime SQLite
-records were excluded from detection and never read.
-
-Source: `core/growth.py` / `GrowthStore.__init__`, `request_training`,
-`decide_training`.
-
-## Starter-kit simulation stays outside approved learning
-
-```text
-CoreAdapter.complete_activity
-  → GrowthService.preserve_baseline_before_simulation
-  → session dataset _growth_baselines
-```
-
-The legacy engine can mutate assessed skills when assessment and snapshot dates
-coincide. The managed adapter preserves initial skills before that mutation.
-The growth snapshot uses the saved baseline and excludes `UI_` history rows,
-so a simulated route completion cannot become an HR-approved certificate gain.
-The legacy route itself continues to update the session dataset.
-
-Sources: `ui/core_adapter.py` / `CoreAdapter.complete_activity`;
-`core/growth.py` / `preserve_baseline_before_simulation`, `snapshot`.
-
-## Coverage and limitations
-
-Graphify AST does not resolve all injected adapter/property calls. Those edges
-were source-reviewed and marked `EXTRACTED`, confidence 1.0, with their branch
-conditions. Ordinary undirected export collapses some relationships sharing
-endpoints; `extraction.json` retains every raw edge and `GRAPH_HEALTH.md` shows
-both raw and final diagnostics. Import stubs are namespace references, not
-runtime call evidence. JSON/CSV dataset records are not individual graph nodes;
-their schema is represented from reviewed READMEs. Actual Graphify host-session
-token usage is unavailable. No runtime DB, environment files, secrets, paid API
-calls, application edits or Git mutations were part of this graph update.
+Final incoming auth update: login derives the stored account role automatically and the workspace header provides sign-out. Source: auth/service.py, auth/ui.py, auth/integration_ui.py and app.py. README checks cover the merged auth/storage and growth scenarios.

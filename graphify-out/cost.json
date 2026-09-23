@@ -23,6 +23,46 @@
       "status": "unavailable",
       "explanation": "Host session token usage is not exposed; build reuses preserved semantic extraction.",
       "files": 39
+    },
+    {
+      "date": "2026-09-23T12:29:51.398587+00:00",
+      "input_tokens": null,
+      "output_tokens": null,
+      "status": "unavailable",
+      "files": 62,
+      "explanation": "Incremental AST plus host-subagent semantics; no external API call."
+    },
+    {
+      "date": "2026-09-23T12:31:47.193751+00:00",
+      "input_tokens": null,
+      "output_tokens": null,
+      "status": "unavailable",
+      "files": 62,
+      "explanation": "Incremental AST plus host-subagent semantics; no external API call."
+    },
+    {
+      "date": "2026-09-23T12:41:59.360007+00:00",
+      "input_tokens": null,
+      "output_tokens": null,
+      "status": "unavailable",
+      "files": 76,
+      "explanation": "Incremental AST plus host-subagent semantics; no external API call."
+    },
+    {
+      "date": "2026-09-23T12:47:41.320202+00:00",
+      "input_tokens": null,
+      "output_tokens": null,
+      "status": "unavailable",
+      "files": 77,
+      "explanation": "Incremental AST plus host-subagent semantics; no external API call."
+    },
+    {
+      "date": "2026-09-23T12:53:31.204018+00:00",
+      "input_tokens": null,
+      "output_tokens": null,
+      "status": "unavailable",
+      "files": 10,
+      "explanation": "Localized AST plus host-reviewed README delta; no external API calls."
     }
   ],
   "total_input_tokens": null,

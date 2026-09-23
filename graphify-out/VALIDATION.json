@@ -1,20 +1,40 @@
 {
   "status": "passed",
-  "nodes": 415,
-  "edges": 955,
-  "covered_sources": 39,
-  "raw_declared_nodes": 376,
-  "raw_edges": 968,
-  "raw_import_endpoint_edges": 165,
-  "collapsed_undirected_edges": 13,
+  "nodes": 970,
+  "edges": 2532,
+  "communities": 41,
+  "covered_sources": 77,
+  "incremental_raw_nodes": 161,
+  "incremental_raw_edges": 492,
+  "raw_collapsed_undirected_edges": 6,
   "final_dangling_endpoint_edges": 0,
   "checks": [
-    "all covered source hashes current after merge checkout",
-    "AST identical after final checkout",
-    "unique IDs and resolved exported endpoints",
-    "four HR and AI paths",
-    "portable relative source paths",
-    "runtime DB, env, secrets and virtual environments excluded"
+    "covered source hashes match during generation",
+    "original engine and unchanged semantics preserved",
+    "unique IDs and resolved final endpoints",
+    "portable source paths",
+    "runtime databases, secrets, env and virtual environments excluded",
+    "all 77 source hashes rechecked after final export",
+    "all hyperedge member IDs resolve",
+    "export contains no secret project keys",
+    "final localized auth/logout/README update and all source hashes verified"
+  ],
+  "paths": [
+    {
+      "source": "ui_growth_views_render_growth_map",
+      "target": "core_growth_growthservice_development_plan",
+      "connected": true
+    },
+    {
+      "source": "ui_growth_views_render_growth_map",
+      "target": "core_growth_growthservice_start_research",
+      "connected": true
+    },
+    {
+      "source": "ui_growth_views_render_route",
+      "target": "core_growth_growthservice_submit_training_completion",
+      "connected": true
+    }
   ],
   "token_usage": "unavailable",
   "external_api_calls": 0
