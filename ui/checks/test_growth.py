@@ -3,7 +3,9 @@ import os
 import tempfile
 import unittest
 from copy import deepcopy
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
+from concurrent.futures import ThreadPoolExecutor
+from threading import Barrier
 from pathlib import Path
 from unittest.mock import patch
 
@@ -147,6 +149,38 @@ class GrowthTests(unittest.TestCase):
         self.assertEqual(self.service.recommend(self.data, self.eid)['status'], 'ready')
         with self.assertRaises(ValueError):
             self.service.request_training(self.data, self.eid, plan['plan_id'], 0, 0)
+
+    def test_plan_expiry_and_training_approval_never_awards_completion_xp(self):
+        with patch.dict(os.environ, {'OPENAI_API_KEY': 'synthetic-test-token'}), \
+             patch('core.growth_ai._bounded_http', return_value=provider_response(self.service.facts(self.data, self.eid))):
+            plan = self.service.recommend(self.data, self.eid, True)
+        for track, course in [(-1, 0), (0, -1), (False, 0)]:
+            with self.assertRaises(ValueError):
+                self.service.request_training(self.data, self.eid, plan['plan_id'], track, course)
+        before = self.service.snapshot(self.data, self.eid)['xp']
+        rid = self.service.request_training(self.data, self.eid, plan['plan_id'], 0, 0)
+        self.service.decide_training(rid, True, 'Бюджет согласован', actor='hr')
+        self.assertEqual(self.service.snapshot(self.data, self.eid)['xp'], before)
+        with self.assertRaises(ValueError):
+            self.service.decide_training(rid, True, 'Повторное решение', actor='hr')
+        with self.store.connection() as db:
+            db.execute('UPDATE plans SET created_at=?', ((datetime.now(timezone.utc)-timedelta(days=8)).isoformat(),))
+        with self.assertRaisesRegex(ValueError, 'устарел'):
+            self.service.request_training(self.data, self.eid, plan['plan_id'], 0, 0)
+
+    def test_simultaneous_employees_cannot_reserve_more_than_total_budget(self):
+        barrier = Barrier(2)
+        facts = [self.service.facts(self.data, eid) for eid in (self.eid, 'E0002')]
+        def request(index):
+            barrier.wait(timeout=10)
+            return GrowthAdvisor(GrowthStore(self.store.path)).recommend(('E0001', 'E0002')[index], facts[index], True)
+        with patch.dict(os.environ, {'OPENAI_API_KEY': 'synthetic-test-token', 'CAREER_QUEST_GROWTH_BUDGET_USD': '.1'}), \
+             patch('core.growth_ai._bounded_http', side_effect=TimeoutError) as transport, ThreadPoolExecutor(2) as pool:
+            results = list(pool.map(request, range(2)))
+            budget = GrowthAdvisor(self.store).budget()
+        self.assertCountEqual([r['status'] for r in results], ['fallback', 'budget'])
+        self.assertEqual(transport.call_count, 1)
+        self.assertEqual(budget['used'], .1)
 
 
 if __name__ == '__main__':

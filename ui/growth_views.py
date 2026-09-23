@@ -27,7 +27,7 @@ def radar(traits, labels):
         return center[0] + radius * scale * math.cos(angle), center[1] + radius * scale * math.sin(angle)
     def polygon(scale):
         return ' '.join(f'{x:.1f},{y:.1f}' for x, y in (point(i, scale) for i in range(6)))
-    parts = ['<svg class="cq-radar" viewBox="0 0 440 340" role="img" aria-label="Шесть характеристик сотрудника, оценка HR от нуля до пяти">']
+    parts = ['<svg xmlns="http://www.w3.org/2000/svg" class="cq-radar" viewBox="0 0 440 340" role="img" aria-label="Шесть характеристик сотрудника, оценка HR от нуля до пяти" font-family="Segoe UI, sans-serif">']
     for scale in (.2, .4, .6, .8, 1):
         parts.append(f'<polygon points="{polygon(scale)}" fill="none" stroke="#cdded5" stroke-width="1"/>')
     for i in range(6):
@@ -42,7 +42,8 @@ def radar(traits, labels):
         parts.append(f'<text x="{x:.1f}" y="{y:.1f}" text-anchor="middle" fill="#182e27" font-size="11" font-weight="600">{e(label)}</text>')
         parts.append(f'<text x="{x:.1f}" y="{y+17:.1f}" text-anchor="middle" fill="#087b5b" font-size="12" font-weight="700">{value}</text>')
     parts.append('</svg>')
-    html(''.join(parts))
+    # Streamlit sanitizes inline SVG out of st.html; its image component supports SVG.
+    st.image(''.join(parts), width='stretch')
 
 
 @st.fragment(run_every=60)

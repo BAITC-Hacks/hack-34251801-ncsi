@@ -83,6 +83,10 @@ def main():
             page.locator(".cq-footer").wait_for()
             page.evaluate("document.fonts.ready")
             label = f"{scheme}-{saved or 'system'}"
+            radar = page.locator('[data-testid="stImage"] img').first
+            expect(radar).to_be_visible()
+            expect(radar).to_have_js_property('complete', True)
+            assert radar.evaluate('el => el.naturalWidth > 0 && el.getBoundingClientRect().height > 150'), 'Radar did not render'
             minimum = readable_text(page)
             page.screenshot(path=str(output / f"{label}-growth.png"))
             page.get_by_role("tab", name="Мой маршрут", exact=True).click()

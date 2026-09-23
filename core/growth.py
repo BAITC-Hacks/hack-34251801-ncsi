@@ -6,7 +6,7 @@ import os
 import sqlite3
 from contextlib import contextmanager
 from copy import deepcopy
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
 from uuid import uuid4
@@ -232,6 +232,10 @@ class GrowthService:
         plan = next((p for p in plans if p['id'] == plan_id), None)
         if not plan:
             raise ValueError("План сотрудника не найден.")
+        if plan['created_at'] < (datetime.now(timezone.utc) - timedelta(days=7)).isoformat():
+            raise ValueError("План устарел. Обновите поиск курсов перед заявкой.")
+        if any(type(index) is not int or index < 0 for index in (track_index, course_index)):
+            raise ValueError("Курс не найден в плане.")
         from .growth_ai import fingerprint
         if plan['fingerprint'] != fingerprint(self.facts(dataset, employee_id)):
             raise ValueError("Портфолио изменилось. Обновите треки перед заявкой.")
