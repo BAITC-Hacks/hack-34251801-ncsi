@@ -129,15 +129,23 @@ class AuthorizedGrowth:
         return self.raw.facts(self._latest(employee_id), employee_id)
 
     def recommend(self, dataset, employee_id, generate=False):
-        latest = self._latest(employee_id, {'employee'} if generate else None)
+        latest = self._latest(employee_id, {'employee', 'hr'} if generate else None)
         return self.raw.recommend(latest, employee_id, generate)
 
     def development_plan(self, dataset, employee_id):
         return self.raw.development_plan(self._latest(employee_id), employee_id)
 
     def start_research(self, dataset, employee_id, trigger='manual'):
-        latest = self._latest(employee_id, {'employee'})
+        latest = self._latest(employee_id, {'employee', 'hr'})
         return self.raw.start_research(latest, employee_id, trigger=trigger)
+
+    def assign_course(self, dataset, employee_id, plan_id, course_id, reason='', actor='employee'):
+        latest = self._latest(employee_id, {'hr'})
+        return self.raw.assign_course(latest, employee_id, plan_id, course_id, reason, actor='hr')
+
+    def assign_custom_course(self, dataset, employee_id, title, url, reason='', actor='employee'):
+        latest = self._latest(employee_id, {'hr'})
+        return self.raw.assign_custom_course(latest, employee_id, title, url, reason, actor='hr')
 
     def choose_course(self, dataset, employee_id, plan_id, course_id):
         latest = self._latest(employee_id, {'employee'})

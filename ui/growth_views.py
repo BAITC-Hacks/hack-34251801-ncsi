@@ -226,7 +226,7 @@ def alternatives(employee_id, track_id):
     change_tab('Треки и курсы')
 
 
-def course_card(adapter, dataset, employee_id, plan, course, track_id, prefix='course'):
+def course_card(adapter, dataset, employee_id, plan, course, track_id, prefix='course', hr=False):
     with st.container(border=True):
         st.write(f"**{course['title']}** · {course['provider']}")
         st.write(course.get('why') or course.get('reason', ''))
@@ -234,13 +234,28 @@ def course_card(adapter, dataset, employee_id, plan, course, track_id, prefix='c
         st.link_button('Открыть курс · источник', course['url'])
         cid = course['id']
         prefix = prefix + '-' + track_id
+        if hr:
+            if course.get('hidden'):
+                st.caption('Сотрудник скрыл это предложение из своего подбора.')
+            if course.get('mandatory'):
+                st.success('Обязательный курс назначен · ' + STATUS.get(course['status'], course['status']))
+            else:
+                reason_key = f'assign-reason-{employee_id}-{prefix}-{cid}'
+                st.text_input('Комментарий к назначению', key=reason_key, max_chars=500, placeholder='Необязательно')
+                st.button('Назначить обязательным', key=f'assign-{employee_id}-{prefix}-{cid}', type='primary', width='stretch',
+                          on_click=action, args=(lambda: adapter.growth.assign_course(dataset, employee_id,
+                              plan['plan_id'], cid, st.session_state.get(reason_key, ''), actor='hr'),
+                              'Обязательный курс назначен сотруднику и добавлен в его маршрут.'))
+            return
         if course.get('request_id'):
-            st.info('В маршруте: ' + STATUS.get(course['status'], course['status']))
+            st.info(('Обязательный курс · ' if course.get('mandatory') else 'В маршруте: ') + STATUS.get(course['status'], course['status']))
             st.button('Открыть заявку', key=f'{prefix}-route-{cid}', on_click=change_tab, args=('Мой маршрут',))
         else:
             st.button('Хочу этот курс', key=f'{prefix}-want-{cid}', type='primary', on_click=action,
                       args=(lambda: adapter.growth.choose_course(dataset, employee_id, plan['plan_id'], cid),
                             'Курс добавлен в маршрут. Заявка отправлена HR.'))
+        if course.get('mandatory'):
+            return
         hidden = course.get('hidden', False)
         st.button('Восстановить' if hidden else 'Не подходит', key=f'{prefix}-hide-{cid}', on_click=action,
                  args=(lambda: adapter.growth.hide_course(dataset, employee_id, plan['plan_id'], cid, hidden=not hidden),
@@ -250,18 +265,19 @@ def course_card(adapter, dataset, employee_id, plan, course, track_id, prefix='c
                       on_click=alternatives, args=(employee_id, track_id), width='stretch')
 
 
-def custom_course_form(adapter, dataset, employee_id):
-    prefix = f'custom-{employee_id}'
+def custom_course_form(adapter, dataset, employee_id, hr=False):
+    prefix = f'custom-{employee_id}' + ('-hr' if hr else '')
     def submit():
-        action(lambda: adapter.growth.add_custom_course(dataset, employee_id,
-            st.session_state[prefix+'-title'], st.session_state[prefix+'-url'], st.session_state[prefix+'-reason']),
-            'Ваш курс добавлен в маршрут и отправлен HR.')
-    with st.expander('Предложить свой курс'):
+        operation = adapter.growth.assign_custom_course if hr else adapter.growth.add_custom_course
+        action(lambda: operation(dataset, employee_id, st.session_state[prefix+'-title'],
+            st.session_state[prefix+'-url'], st.session_state[prefix+'-reason'], **({'actor': 'hr'} if hr else {})),
+            'Обязательный курс назначен сотруднику.' if hr else 'Ваш курс добавлен в маршрут и отправлен HR.')
+    with st.expander('Назначить обязательный курс по ссылке' if hr else 'Предложить свой курс'):
         with st.form(prefix):
             st.text_input('Название своего курса', key=prefix+'-title', max_chars=160)
             st.text_input('HTTPS-ссылка на курс', key=prefix+'-url', max_chars=1500)
             st.text_area('Почему хотите этот курс', key=prefix+'-reason', max_chars=500)
-            st.form_submit_button('Предложить курс HR', on_click=submit)
+            st.form_submit_button('Назначить обязательный курс' if hr else 'Предложить курс HR', on_click=submit)
 
 
 def hidden_courses(adapter, dataset, employee_id, plan):
@@ -272,8 +288,10 @@ def hidden_courses(adapter, dataset, employee_id, plan):
                 course_card(adapter, dataset, employee_id, plan, course, track['id'], prefix='hidden')
 
 
-def render_tracks(adapter, dataset, employee_id):
-    st.subheader('Направления и варианты обучения')
+def render_tracks(adapter, dataset, employee_id, hr=False):
+    st.subheader('Назначить обучение сотруднику' if hr else 'Направления и варианты обучения')
+    if hr:
+        st.caption('Сотрудник выбран в боковой панели. Здесь его общий AI-план: поиск, кеш и бюджет те же. Назначенный обязательный курс сразу появляется в маршруте.')
     plan = adapter.growth.development_plan(dataset, employee_id)
     plan_header(adapter, dataset, employee_id, plan)
     tracks = plan['tracks']
@@ -291,14 +309,14 @@ def render_tracks(adapter, dataset, employee_id):
                          on_change=remember_direction_filter, args=(employee_id,))
             selected = st.session_state[filter_key]
             shown = tracks if selected == '__all__' else [by_id[selected]]
-            count = sum(not c.get('hidden') for t in shown for c in t['courses'])
+            count = sum(hr or not c.get('hidden') for t in shown for c in t['courses'])
             html(f'<div class="cq-filter-result"><b>{"Все направления" if selected == "__all__" else "Фильтр включён"}</b>'
                  f'<span>Направлений: {len(shown)} из {len(tracks)} · Вариантов обучения: {count}</span></div>')
             if selected != '__all__':
                 st.button('Сбросить фильтр', on_click=set_direction_filter, args=(employee_id, '__all__'))
         for track in shown:
             number = tracks.index(track) + 1
-            visible = [c for c in track['courses'] if not c.get('hidden')]
+            visible = [c for c in track['courses'] if hr or not c.get('hidden')]
             kind = 'Углубление специализации' if track.get('kind') == 'specialization' else 'Новая ветка развития'
             with st.container(border=True, key=f'cq-direction-{number}'):
                 html(f'<div class="cq-direction-heading"><span class="cq-direction-number">{number:02d}</span>'
@@ -318,10 +336,12 @@ def render_tracks(adapter, dataset, employee_id):
                     columns = st.columns(2)
                     for column, course in zip(columns, visible[start:start + 2]):
                         with column:
-                            course_card(adapter, dataset, employee_id, plan, course, track['id'])
-    hidden_courses(adapter, dataset, employee_id, plan)
-    custom_course_form(adapter, dataset, employee_id)
-    st.button('Перейти в мой маршрут', on_click=change_tab, args=('Мой маршрут',))
+                            course_card(adapter, dataset, employee_id, plan, course, track['id'], prefix='hr' if hr else 'course', hr=hr)
+    if not hr:
+        hidden_courses(adapter, dataset, employee_id, plan)
+    custom_course_form(adapter, dataset, employee_id, hr=hr)
+    if not hr:
+        st.button('Перейти в мой маршрут', on_click=change_tab, args=('Мой маршрут',))
 
 
 def render_growth_map(adapter, dataset, employee_id):
@@ -364,7 +384,12 @@ def render_route(adapter, dataset, employee_id):
         rid, status = request['id'], request['status']
         with st.container(border=True, key=f'route-{rid}'):
             st.write(f"**{request['title']}** · {STATUS.get(status, status)}")
-            st.caption('Предложение сотрудника' if request.get('source') == 'employee' else 'Из плана развития')
+            if request.get('mandatory'):
+                st.info('Обязательное обучение · назначено HR')
+                if request.get('assignment_reason'):
+                    st.write('Задача от HR: ' + request['assignment_reason'])
+            else:
+                st.caption('Предложение сотрудника' if request.get('source') == 'employee' else 'Из плана развития')
             if request.get('reason'):
                 st.write('HR: ' + request['reason'])
             st.link_button('Страница курса', request['url'])
@@ -376,10 +401,11 @@ def render_route(adapter, dataset, employee_id):
                           on_click=open_completion, args=(employee_id, rid))
                 if st.session_state.get(f'completion-open-{employee_id}') == rid:
                     certificate_form(adapter, dataset, employee_id, request)
-            if status in {'pending', 'approved', 'in_progress'}:
+            if status in {'pending', 'approved', 'in_progress'} and not request.get('mandatory'):
                 st.button('Отменить заявку', key=f'cancel-{rid}', on_click=action,
                           args=(lambda rid=rid: adapter.growth.cancel_training(dataset, employee_id, rid), 'Заявка отменена. XP не изменился.'))
-            st.button('Выбрать другой курс', key=f'replace-{rid}', on_click=change_tab, args=('Треки и курсы',))
+            if not request.get('mandatory'):
+                st.button('Выбрать другой курс', key=f'replace-{rid}', on_click=change_tab, args=('Треки и курсы',))
     st.button('Выбрать курсы на карте', on_click=change_tab, args=('Карта развития',))
     custom_course_form(adapter, dataset, employee_id)
 

@@ -21,7 +21,7 @@ from playwright.sync_api import expect, sync_playwright
 
 from core import api
 from core.growth import GrowthService, GrowthStore
-from .browser_login_helpers import login_demo
+from .browser_login_helpers import login_demo, switch_demo_role
 from .interactive_browser_check import settle, tab
 from .test_growth import provider_response
 
@@ -149,6 +149,31 @@ def main():
                         expect(headings.first).to_contain_text(SECOND)
                         filter_to(page, 'Все направления')
 
+                        # HR assigns from the same cached plan; an assignment is
+                        # ready to start, but does not grant completion credit.
+                        xp_before = service.snapshot(dataset, 'E0001')['xp']
+                        switch_demo_role(page, 'hr')
+                        page.get_by_role('tab', name='Назначить обучение', exact=True).click()
+                        settle(page, 'hr')
+                        expect(page.locator('.cq-direction-heading')).to_have_count(2)
+                        page.get_by_label('Комментарий к назначению', exact=True).first.fill('Обязательная подготовка к рабочему проекту')
+                        page.get_by_role('button', name='Назначить обязательным', exact=True).first.click()
+                        settle(page, 'hr')
+                        assigned = service.development_plan(dataset, 'E0001')['requests']
+                        assert len(assigned) == 1 and assigned[0]['mandatory'] and assigned[0]['status'] == 'approved'
+                        switch_demo_role(page, 'employee')
+                        tab(page, 'Мой маршрут')
+                        expect(page.get_by_text('Обязательное обучение · назначено HR', exact=True)).to_be_visible()
+                        expect(page.get_by_role('button', name='Отменить заявку', exact=True)).to_have_count(0)
+                        expect(page.get_by_role('button', name='Выбрать другой курс', exact=True)).to_have_count(0)
+                        page.get_by_role('button', name='Начать обучение', exact=True).click()
+                        settle(page)
+                        expect(page.get_by_role('button', name='Завершить обучение', exact=True)).to_be_visible()
+                        assert service.development_plan(dataset, 'E0001')['requests'][0]['status'] == 'in_progress'
+                        assert service.snapshot(dataset, 'E0001')['xp'] == xp_before
+                        page.screenshot(path=str(output/'03-mandatory-course.png'), full_page=True)
+                        tab(page, 'Треки и курсы')
+
                         page.set_viewport_size({'width': 390, 'height': 844})
                         page.wait_for_timeout(500)
                         collapse = page.locator('[data-testid="stSidebarCollapseButton"] button')
@@ -179,6 +204,7 @@ def main():
                         browser.close()
                 print('PASS: two distinct directions; filter/reset persists across navigation; map transfers selected direction')
                 print('PASS: desktop two-column cards, mobile stacked cards, no horizontal overflow or extra AI requests')
+                print('PASS: HR mandatory assignment -> employee route without cancellation/replacement -> training start, no XP granted')
                 print('Artifacts:', output)
             finally:
                 if os.name == 'nt':

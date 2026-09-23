@@ -153,9 +153,12 @@ class PersistentAdapterTests(unittest.TestCase):
 
     def test_new_growth_actions_enforce_role_owner_and_revoked_session(self):
         hr = self.hr_adapter()
-        for call in self.growth_actions(self.employee, 'E0002') + self.growth_actions(hr, 'E0001') + self.growth_actions(self.admin, 'E0001'):
+        for call in self.growth_actions(self.employee, 'E0002') + self.growth_actions(hr, 'E0001')[1:] + self.growth_actions(self.admin, 'E0001'):
             with self.subTest(call=call), self.assertRaises(PermissionError):
                 call()
+        with patch.object(hr.growth.raw, 'start_research', return_value={'status': 'ready'}) as research:
+            self.assertEqual(hr.growth.start_research(self.dataset, 'E0001', trigger='manual')['status'], 'ready')
+            research.assert_called_once()
         for read in [lambda: self.employee.growth.development_plan(self.dataset, 'E0002'),
                      lambda: self.employee.growth.approved_dataset(self.dataset)]:
             with self.assertRaises(PermissionError):

@@ -156,10 +156,13 @@ def render_hr(adapter, employees):
     if adapter.is_demo:
         render_hr_overview(adapter, employees)
         return
-    approvals, profile_tab, overview = st.tabs(["Заявки и решения", "Оценка сотрудника", "Обзор команды"], key="hr_tab", on_change="rerun")
+    approvals, assignments, profile_tab, overview = st.tabs(["Заявки и решения", "Назначить обучение", "Оценка сотрудника", "Обзор команды"], key="hr_tab", on_change="rerun")
     with approvals:
         if approvals.open:
             render_hr_requests(adapter, st.session_state.dataset, employees)
+    with assignments:
+        if assignments.open and st.session_state.get("employee_id"):
+            render_tracks(adapter, st.session_state.dataset, st.session_state.employee_id, hr=True)
     with profile_tab:
         if profile_tab.open and st.session_state.get("employee_id"):
             render_hr_profile(adapter, st.session_state.dataset, st.session_state.employee_id)

@@ -70,7 +70,7 @@ class DemoRoutingTests(unittest.TestCase):
         demo_login(app, "hr")
         self.assertEqual(app.selectbox(key="employee_id").value, "E0001")
         self.assertEqual(len(app.selectbox(key="employee_id").options), 200)
-        self.assertEqual({tab.label for tab in app.tabs}, {"Заявки и решения", "Оценка сотрудника", "Обзор команды"})
+        self.assertEqual({tab.label for tab in app.tabs}, {"Заявки и решения", "Назначить обучение", "Оценка сотрудника", "Обзор команды"})
         app.selectbox(key="employee_id").select("E0200").run()
         hr_tab(app, "Оценка сотрудника")
         self.assertEqual(len(app.slider), 6)

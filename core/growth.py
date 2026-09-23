@@ -317,7 +317,9 @@ class GrowthService:
                 course.update(id=cid, reason=course.get('why', course.get('reason', '')),
                               source='ai', source_url=course['url'], hidden=decisions.get(cid, False),
                               status=request['status'] if request else 'suggested',
-                              request_id=request['id'] if request else None)
+                              request_id=request['id'] if request else None,
+                              mandatory=bool(request and request.get('mandatory')),
+                              assignment_reason=request.get('assignment_reason', '') if request else '')
                 hidden_count += int(course['hidden'])
         result.update(snapshot=snapshot, facts=facts, requests=requests, hidden_count=hidden_count)
         return result
@@ -372,6 +374,59 @@ class GrowthService:
         return self._save_course_request(employee_id, dict(course, track=track['title'],
                                         track_id=track_id(track), plan_id=plan_id, source='ai'))
 
+    def _assign_course_request(self, employee_id, payload, reason):
+        """HR assignment reuses a course's lifecycle without repeating completion."""
+        url = public_url(payload['url'])
+        cid = course_id(url)
+        reason = text(reason, 'Основание назначения', 500, required=False)
+        with self.store.connection() as db:
+            db.execute('BEGIN IMMEDIATE')
+            existing = next((row for row in db.execute(
+                'SELECT * FROM training_requests WHERE employee_id=?', (employee_id,))
+                if course_id(row['url']) == cid), None)
+            at = now_iso()
+            saved = dict(payload)
+            if existing:
+                # Retain original course provenance and the link to its certificate.
+                saved.update(json.loads(existing['payload']))
+            assignment_reason = reason or saved.get('assignment_reason') or 'Обязательное обучение назначено HR.'
+            saved.update(mandatory=True, assignment_reason=assignment_reason, assigned_by='hr',
+                         assigned_at=saved.get('assigned_at') or at)
+            if existing:
+                rid = existing['id']
+                status = existing['status']
+                if status in {'pending', 'rejected', 'cancelled'}:
+                    status = 'approved'
+                    db.execute('UPDATE training_requests SET payload=?,status=?,reason=?,reviewed_at=? WHERE id=?',
+                               (dump(saved), status, assignment_reason, at, rid))
+                elif status in {'approved', 'in_progress', 'completion_pending', 'completed'}:
+                    db.execute('UPDATE training_requests SET payload=? WHERE id=?', (dump(saved), rid))
+                else:
+                    raise ValueError('Неизвестный статус заявки: назначение не сохранено.')
+            else:
+                rid = uuid4().hex
+                db.execute('INSERT INTO training_requests(id,employee_id,url,payload,status,reason,created_at,reviewed_at) VALUES (?,?,?,?,?,?,?,?)',
+                           (rid, employee_id, url, dump(saved), 'approved', assignment_reason, at, at))
+            db.execute('INSERT INTO course_decisions(employee_id,course_id,plan_id,hidden,updated_at) VALUES (?,?,?,?,?) '
+                       'ON CONFLICT(employee_id,course_id) DO UPDATE SET hidden=0,updated_at=excluded.updated_at',
+                       (employee_id, cid, saved.get('plan_id', ''), 0, at))
+        return rid
+
+    def assign_course(self, dataset, employee_id, plan_id, course_id, reason='', actor='employee'):
+        self._hr(actor)
+        track, course = self._plan_course(dataset, employee_id, plan_id, course_id)
+        return self._assign_course_request(employee_id, dict(course, track=track['title'],
+            track_id=track_id(track), plan_id=plan_id, source='ai'), reason)
+
+    def assign_custom_course(self, dataset, employee_id, title, url, reason='', actor='employee'):
+        self._hr(actor)
+        engine.employee(dataset, employee_id)
+        payload = {'title': text(title, 'Курс', 160), 'url': public_url(url),
+                   'provider': 'Курс от HR', 'why': text(reason, 'Основание назначения', 500, required=False),
+                   'source': 'hr', 'track': 'Назначено HR', 'plan_id': '',
+                   'price_text': 'Уточнить у провайдера', 'level': 'Не указан'}
+        return self._assign_course_request(employee_id, payload, reason)
+
     def hide_course(self, dataset, employee_id, plan_id, course_id, hidden=True):
         self._plan_course(dataset, employee_id, plan_id, course_id)
         if type(hidden) is not bool:
@@ -394,6 +449,8 @@ class GrowthService:
         with self.store.connection() as db:
             db.execute('BEGIN IMMEDIATE')
             row = self._owned_request(db, employee_id, request_id)
+            if json.loads(row['payload']).get('mandatory'):
+                raise ValueError('Обязательное обучение назначено HR. Обсудите изменение назначения с HR.')
             if row['status'] == 'cancelled':
                 return
             if row['status'] not in {'pending', 'approved', 'in_progress'}:
