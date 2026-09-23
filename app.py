@@ -9,6 +9,7 @@ from copy import deepcopy
 from pathlib import Path
 
 import streamlit as st
+from dotenv import load_dotenv
 
 from ui.components import STATUSES, e, empty_state, html, journey, number, page_heading, recommendation_content, skill_card, stat
 from ui.core_adapter import AdapterError, CoreAdapter
@@ -16,6 +17,7 @@ from ui.development_map import render_development_map
 from ui.growth_views import render_profile, render_certificates, render_tracks, render_hr_profile, render_hr_requests
 
 ROOT = Path(__file__).resolve().parent
+load_dotenv(ROOT / '.env', override=False, interpolate=False)
 DATA_DIR = Path(os.environ.get("CAREER_QUEST_DATA_DIR", str(ROOT / "case/case_1/career_quest_dataset")))
 LOGGER = logging.getLogger("career_quest.ui")
 
