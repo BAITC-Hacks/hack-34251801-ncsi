@@ -53,7 +53,7 @@ def render_users(service, token, employees):
         employee_id = st.selectbox('Профиль сотрудника', options,
             index=options.index(linked) if linked in options else 0,
             format_func=lambda eid: f'{names[eid]} · {eid}' if eid else 'Пока не назначен')
-        st.caption('Выбирайте профиль после проверки принадлежности аккаунта сотруднику. Назначенная роль хранится в базе, её нельзя получить переключателем на входе.')
+        st.caption('Выбирайте профиль после проверки принадлежности аккаунта сотруднику. После входа пользователь автоматически попадает в раздел назначенной роли.')
         saved = st.form_submit_button('Сохранить доступ', type='primary')
     if saved:
         try:

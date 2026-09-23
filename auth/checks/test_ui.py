@@ -55,8 +55,8 @@ class AuthUITests(unittest.TestCase):
         self.button(app, "Создать аккаунт →").click().run()
         self.assertEqual(len(app.exception), 0)
 
-    def login_form(self, app, email=EMAIL, password=PASSWORD, role="employee"):
-        self.group(app, "cq_auth_role").set_value(role).run()
+    def login_form(self, app, email=EMAIL, password=PASSWORD):
+        self.assertFalse(any(widget.key == "cq_auth_role" for widget in app.get("button_group")))
         self.field(app, "Рабочая почта").set_value(email)
         self.field(app, "Пароль").set_value(password)
         self.button(app, "Войти в Career Quest →").click().run()
@@ -72,7 +72,7 @@ class AuthUITests(unittest.TestCase):
         self.signup_form(app)
         self.assertTrue(any("Аккаунт создан" in item.value for item in app.success))
         self.assertEqual(self.group(app, "cq_auth_mode").value, "Вход")
-        self.assertEqual(self.group(app, "cq_auth_role").value, "employee")
+        self.assertFalse(any(widget.key == "cq_auth_role" for widget in app.get("button_group")))
         self.assertNotIn(TOKEN_KEY, app.session_state)
         self.login_form(app)
         token = app.session_state[TOKEN_KEY]
@@ -86,18 +86,27 @@ class AuthUITests(unittest.TestCase):
         self.assertNotIn(TOKEN_KEY, app.session_state)
         self.assertEqual(self.group(app, "cq_auth_mode").value, "Вход")
 
-    def test_incorrect_password_and_selected_role_are_rejected(self):
+    def test_incorrect_password_and_unknown_account_have_same_error(self):
         self.seed_user()
         app = self.app()
         self.login_form(app, password="Это неверный пароль")
         self.assertEqual(len(app.error), 1)
         password_message = app.error[0].value
         self.assertNotIn(TOKEN_KEY, app.session_state)
-        self.login_form(app, role="admin")
+        self.login_form(app, email="unknown@example.test")
         self.assertEqual(len(app.error), 1)
         self.assertEqual(app.error[0].value, password_message)
         self.assertNotIn(TOKEN_KEY, app.session_state)
         self.assertFalse(any(button.key == "cq_auth_logout" for button in app.button))
+
+    def test_legacy_role_state_cannot_upgrade_employee(self):
+        self.seed_user()
+        app = self.app()
+        app.session_state["cq_auth_role"] = "admin"
+        self.login_form(app)
+        self.assertEqual(len(app.error), 0)
+        user = self.service.current_user(app.session_state[TOKEN_KEY])
+        self.assertEqual(user["role"], "employee")
 
     def test_all_three_assigned_roles_can_sign_in(self):
         for role in ("employee", "hr", "admin"):
@@ -105,7 +114,7 @@ class AuthUITests(unittest.TestCase):
                 email = f"ui.{role}@example.test"
                 self.seed_user(role, email)
                 app = self.app()
-                self.login_form(app, email=email, role=role)
+                self.login_form(app, email=email)
                 self.assertEqual(len(app.error), 0)
                 token = app.session_state[TOKEN_KEY]
                 self.assertEqual(self.service.current_user(token)["role"], role)
@@ -135,7 +144,7 @@ class AuthUITests(unittest.TestCase):
         self.assertNotIn(TOKEN_KEY, app.session_state)
         self.assertTrue(any("Сессия завершена" in item.value for item in app.info))
         self.assertEqual(self.group(app, "cq_auth_mode").value, "Вход")
-        self.login_form(app, role="hr")
+        self.login_form(app)
         self.assertEqual(self.service.current_user(app.session_state[TOKEN_KEY])["role"], "hr")
 
     def test_mismatched_registration_passwords_show_validation(self):

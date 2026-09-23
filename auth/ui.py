@@ -9,11 +9,6 @@ import streamlit as st
 from auth.service import AuthError, AuthService
 
 ROLES = {"employee": "Сотрудник", "hr": "HR", "admin": "Администратор"}
-ROLE_HINTS = {
-    "employee": "Личное пространство для следующего карьерного шага.",
-    "hr": "Единая точка входа для команды развития персонала.",
-    "admin": "Вход для администратора пространства Career Quest.",
-}
 TOKEN_KEY = "cq_auth_token"
 
 
@@ -46,20 +41,14 @@ def _error(message):
 
 
 def _login(service):
-    st.session_state.setdefault("cq_auth_role", "employee")
-    role = st.segmented_control(
-        "Войти как", options=list(ROLES), format_func=ROLES.get,
-        key="cq_auth_role", width="stretch",
-    )
-    selected_role = role or "employee"
-    st.html(f'<p class="auth-role-hint">{ROLE_HINTS[selected_role]}</p>')
+    st.html('<p class="auth-role-hint">Ваше пространство откроется по доступу, назначенному аккаунту.</p>')
     with st.form("cq_auth_login", clear_on_submit=True, border=False):
         email = st.text_input("Рабочая почта", placeholder="name@company.kz", max_chars=254)
         password = st.text_input("Пароль", type="password", placeholder="Введите пароль", max_chars=128)
         submitted = st.form_submit_button("Войти в Career Quest →", type="primary", width="stretch")
     if submitted:
         try:
-            token, _ = service.login(email, password, selected_role)
+            token, _ = service.login(email, password)
         except AuthError as exc:
             _error(str(exc))
         except (sqlite3.Error, OSError):
@@ -68,7 +57,7 @@ def _login(service):
             st.session_state[TOKEN_KEY] = token
             st.rerun()
     with st.expander("Как получить доступ HR или администратора?"):
-        st.write("Войдите с рабочей почтой и выберите роль, назначенную вашему аккаунту. Доступ HR и администратора выдаёт администратор Career Quest.")
+        st.write("Войдите с рабочей почтой и паролем. Доступ HR и администратора назначает администратор Career Quest; нужный раздел откроется автоматически.")
 
 
 def _register(service):
@@ -116,7 +105,6 @@ def render_auth(service=None):
     registered = st.session_state.pop("cq_auth_registered", False)
     if registered:
         st.session_state["cq_auth_mode"] = "Вход"
-        st.session_state["cq_auth_role"] = "employee"
     st.session_state.setdefault("cq_auth_mode", "Вход")
     with st.container(key="cq_auth"):
         left, right = st.columns([1.13, 1], gap="large")
@@ -131,7 +119,7 @@ def render_auth(service=None):
                 subtitle = "Ваше развитие начинается с одного решения." if signup else "Войдите, чтобы продолжить свой путь развития."
                 st.html(f'<div class="auth-form-title"><span class="auth-eyebrow">CAREER QUEST</span><h2>{title}</h2><p>{subtitle}</p></div>')
                 if registered:
-                    st.success("Аккаунт создан. Войдите как сотрудник со своей почтой и паролем.")
+                    st.success("Аккаунт создан. Войдите со своей почтой и паролем.")
                 if expired:
                     st.info("Сессия завершена. Войдите снова, чтобы продолжить.")
                 if signup:

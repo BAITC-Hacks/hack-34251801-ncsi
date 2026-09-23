@@ -11,9 +11,17 @@ html, body, [data-testid="stApp"] { font-family:Manrope,Inter,"Segoe UI",sans-se
 [data-testid="stMarkdown"] [data-testid="stMarkdownContainer"] { color:var(--cq-ink); }
 [data-testid="stAppViewContainer"] { background:#f6f8f5; }
 [data-testid="stHeader"] { background:transparent; }
-[data-testid="stToolbar"] { display:none; }
-[data-testid="stMainBlockContainer"] { max-width:1260px; padding:1rem 2.4rem 3rem; }
-[data-testid="stSidebar"] { background:#fff; border-right:1px solid var(--cq-line); min-width:258px; max-width:258px; }
+/* Keep Streamlit's sidebar opener usable when navigation is collapsed. */
+[data-testid="stToolbar"] { display:flex; }
+[data-testid="stToolbarActions"], [data-testid="stMainMenu"], [data-testid="stAppDeployButton"] { display:none; }
+[data-testid="stMainBlockContainer"] { max-width:1260px; padding:3.2rem 2.4rem 3rem; }
+[data-testid="stSidebar"] { background:#fff; border-right:1px solid var(--cq-line); }
+[data-testid="stSidebar"][aria-expanded="true"] { min-width:258px; max-width:258px; }
+[data-testid="stSidebar"][aria-expanded="false"] { min-width:0; max-width:0; border-right:0; }
+.st-key-cq_account_bar { margin-bottom:12px; padding-bottom:12px; border-bottom:1px solid var(--cq-line); }
+.cq-account-summary { display:flex; flex-wrap:wrap; align-items:center; gap:6px 14px; font-size:13px; }
+.cq-account-summary strong { color:var(--cq-green); }
+.cq-account-summary span { color:var(--cq-muted); overflow-wrap:anywhere; }
 [data-testid="stSidebarUserContent"] { padding:1rem .3rem; }
 [data-testid="stSidebarHeader"] { height:30px; min-height:30px; padding:0 15px; }
 [data-testid="stVerticalBlock"] { gap:.5rem; }
@@ -138,8 +146,8 @@ button[data-baseweb="tab"][aria-selected="true"] { color:var(--cq-green); }
 .cq-map-legend .mastered { color:#386441; }
 .cq-map-legend .recommended { color:#087b5b; font-weight:700; }
 .cq-map-legend .completed { color:#415d78; }
-@media(max-width:1100px) { [data-testid="stMainBlockContainer"] { padding:1.7rem 1.4rem; } .cq-journey { gap:12px; padding:18px; } .cq-event-title { font-size:19px; } }
-@media(max-width:700px) { [data-testid="stMainBlockContainer"] { padding:1.2rem 1rem; } h1 { font-size:1.65rem!important; } .cq-journey { grid-template-columns:1fr 1fr; } .cq-bridge { display:none; } .cq-progress { grid-column:1 / -1; } .cq-page-top span:last-child { display:none; } }
+@media(max-width:1100px) { [data-testid="stMainBlockContainer"] { padding:3.2rem 1.4rem 1.7rem; } .cq-journey { gap:12px; padding:18px; } .cq-event-title { font-size:19px; } }
+@media(max-width:700px) { [data-testid="stMainBlockContainer"] { padding:3.2rem 1rem 1.2rem; } h1 { font-size:1.65rem!important; } .cq-journey { grid-template-columns:1fr 1fr; } .cq-bridge { display:none; } .cq-progress { grid-column:1 / -1; } .cq-page-top span:last-child { display:none; } }
 
 /* Shared-plan directions stay visibly distinct, including when a filter is active. */
 .st-key-cq-direction-filter { background:#edf5f0; border:1px solid #b3cfc0!important; padding:18px!important; border-radius:14px!important; }
