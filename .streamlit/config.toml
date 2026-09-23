@@ -1,0 +1,13 @@
+# Match native Streamlit widgets to the light Career Quest surfaces.
+[theme]
+base = "light"
+primaryColor = "#087b5b"
+backgroundColor = "#f6f8f5"
+secondaryBackgroundColor = "#eef3ee"
+textColor = "#182e27"
+font = "sans-serif"
+
+[theme.sidebar]
+backgroundColor = "#ffffff"
+secondaryBackgroundColor = "#f5f8f4"
+textColor = "#182e27"
